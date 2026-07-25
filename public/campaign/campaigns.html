@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>All Campaigns — WA Campaign Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="logo"><strong>WA</strong> Campaign Manager</div>
+  <div class="menu">
+    <div onclick="window.location.href='index.html'">New Campaign</div>
+    <div class="active" onclick="window.location.href='campaigns.html'">All Campaigns</div>
+    <div onclick="window.location.href='clicks.html'">Clicks</div>
+  </div>
+</div>
+
+<div class="main">
+
+  <div class="header">
+    <h3>All Campaigns</h3>
+  </div>
+  <p class="subtitle">Search, filter and reuse existing campaign configurations.</p>
+
+  <div class="panel">
+    <div class="filters">
+      <div class="field grow">
+        <label for="f_name">Campaign name</label>
+        <input type="text" id="f_name" placeholder="Search by name…">
+      </div>
+      <div class="field">
+        <label for="f_from">From date</label>
+        <input type="date" id="f_from">
+      </div>
+      <div class="field">
+        <label for="f_to">To date</label>
+        <input type="date" id="f_to">
+      </div>
+      <div class="field">
+        <label for="f_size">Rows per page</label>
+        <select id="f_size">
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button type="button" class="btn btn-filter" id="apply-filters">Apply</button>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button type="button" class="btn btn-neutral" id="clear-filters">Clear</button>
+      </div>
+    </div>
+
+    <div id="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>S.No</th>
+            <th>Campaign Name</th>
+            <th>Button Name</th>
+            <th>Created On</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+      <div class="empty-state" id="empty-state" style="display:none;">No campaigns match these filters.</div>
+      <div class="loading" id="loading-state">Loading campaigns…</div>
+    </div>
+
+    <div class="pagination">
+      <div class="info" id="page-info"></div>
+      <div class="controls">
+        <button type="button" class="btn btn-neutral btn-sm" id="prev-page">← Prev</button>
+        <button type="button" class="btn btn-neutral btn-sm" id="next-page">Next →</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Show Details modal -->
+<div class="modal-overlay" id="details-modal">
+  <div class="modal">
+    <button class="btn-ghost modal-close" id="close-modal">Close ✕</button>
+    <h2 id="modal-title" style="margin-top:4px;">Campaign details</h2>
+    <fieldset disabled id="modal-fieldset">
+      <label>Campaign name</label>
+      <input type="text" id="m_campaign_name">
+
+      <label>Button name</label>
+      <input type="text" id="m_button_name">
+
+      <label>Flow type</label>
+      <input type="text" id="m_flow_type">
+
+      <label>Level 1 creative URL</label>
+      <input type="text" id="m_l1_media_url">
+
+      <label>Level 1 message body</label>
+      <textarea id="m_l1_message_body"></textarea>
+
+      <label>Level 1 call to action URL</label>
+      <input type="text" id="m_l1_cta_url">
+
+      <div id="m_l2_wrap">
+        <label style="margin-top:20px;">Level 2 creative URL</label>
+        <input type="text" id="m_l2_media_url">
+
+        <label>Level 2 message body</label>
+        <textarea id="m_l2_message_body"></textarea>
+
+        <label>Level 2 call to action URL</label>
+        <input type="text" id="m_l2_cta_url">
+      </div>
+
+      <label>Created on (UTC)</label>
+      <input type="text" id="m_created_at">
+    </fieldset>
+  </div>
+</div>
+
+<script src="campaigns.js"></script>
+</body>
+</html>

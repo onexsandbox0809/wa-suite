@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>New Campaign — WA Campaign Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="logo"><strong>WA</strong> Campaign Manager</div>
+  <div class="menu">
+    <div class="active" onclick="window.location.href='index.html'">New Campaign</div>
+    <div onclick="window.location.href='campaigns.html'">All Campaigns</div>
+    <div onclick="window.location.href='clicks.html'">Clicks</div>
+  </div>
+</div>
+
+<div class="main">
+
+  <div class="header">
+    <h3 id="page-title">Bot Message Configuration</h3>
+  </div>
+  <p class="subtitle" id="page-subtitle">Define the level-1 message and, if needed, the level-2 fallback message for a campaign.</p>
+
+  <form id="campaign-form" novalidate>
+
+    <!-- Campaign name -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Campaign name</h2>
+        <span class="hint">Used only for search — the button name is generated for you</span>
+      </div>
+      <label for="campaign_name">Campaign name<span class="req">*</span></label>
+      <input type="text" id="campaign_name" name="campaign_name" placeholder="e.g. monsoon_offer_gaming" required>
+    </div>
+
+    <!-- Level 1 -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="step-num">1</span>
+        <h2>Level 1 message</h2>
+      </div>
+
+      <label>Creative (jpg / png / pdf / video, max 5&nbsp;MB)<span class="req">*</span></label>
+      <div class="upload-box" id="l1_drop_zone">
+        <div class="upload-icon">🖼️</div>
+        <div><b>Drag &amp; Drop creative, or click to browse</b></div>
+        <div class="file-name" id="l1_file_name"></div>
+        <input type="file" id="l1_file" accept=".jpg,.jpeg,.png,.pdf,.mp4,.mov,.webm" hidden required>
+      </div>
+      <div class="file-status" id="l1_file_status"></div>
+      <input type="hidden" id="l1_media_url" name="l1_media_url">
+
+      <label for="l1_message_body">Message body<span class="req">*</span></label>
+      <textarea id="l1_message_body" name="l1_message_body" placeholder="Text shown to the end user with the creative" required></textarea>
+
+      <label>Level 1 button type<span class="req">*</span></label>
+      <div class="radio-row">
+        <label class="radio-opt" id="opt-cta">
+          <input type="radio" name="flow_type" value="CTA" required> Call to action button
+        </label>
+        <label class="radio-opt" id="opt-qr">
+          <input type="radio" name="flow_type" value="QR"> Quick reply button
+        </label>
+      </div>
+
+      <!-- CTA sub-fields (level 1) -->
+      <div id="l1-cta-fields" style="display:none;">
+        <label for="l1_cta_name">CTA button label<span class="req">*</span></label>
+        <input type="text" id="l1_cta_name" name="l1_cta_name" placeholder="e.g. Shop Now" maxlength="20">
+        <div class="hint" style="margin: -6px 0 12px;">This is the text shown on the button itself (WhatsApp limits button labels to ~20 characters).</div>
+
+        <label for="l1_cta_url">Call to action URL<span class="req">*</span></label>
+        <input type="url" id="l1_cta_url" name="l1_cta_url" placeholder="https://...">
+      </div>
+
+      <!-- QR notice -->
+      <div id="qr-callout" class="callout" style="display:none;">
+        Quick reply selected: the level-2 message that fires after the user taps the quick reply
+        can only use a <strong>call to action</strong> button. Configure it below.
+      </div>
+    </div>
+
+    <!-- Level 2 (only when QR selected) -->
+    <div class="panel l2-panel" id="l2-panel" style="display:none;">
+      <div class="panel-head">
+        <span class="step-num">2</span>
+        <h2>Level 2 message (sent after Quick Reply tap)</h2>
+      </div>
+
+      <label>Creative (jpg / png / pdf / video, max 5&nbsp;MB)<span class="req">*</span></label>
+      <div class="upload-box" id="l2_drop_zone">
+        <div class="upload-icon">🖼️</div>
+        <div><b>Drag &amp; Drop creative, or click to browse</b></div>
+        <div class="file-name" id="l2_file_name"></div>
+        <input type="file" id="l2_file" accept=".jpg,.jpeg,.png,.pdf,.mp4,.mov,.webm" hidden>
+      </div>
+      <div class="file-status" id="l2_file_status"></div>
+      <input type="hidden" id="l2_media_url" name="l2_media_url">
+
+      <label for="l12_button_bridge_name">Quick Reply button label<span class="req">*</span></label>
+      <input type="text" id="l12_button_bridge_name" name="l12_button_bridge_name" placeholder="e.g. Yes, tell me more" maxlength="20">
+      <div class="hint" style="margin: -6px 0 12px;">This is the text shown on the Level 1 Quick Reply button that the user taps to trigger this Level 2 message.</div>
+
+      <label for="l2_message_body">Message body<span class="req">*</span></label>
+      <textarea id="l2_message_body" name="l2_message_body" placeholder="Text shown after the quick reply is tapped"></textarea>
+
+      <label for="l2_cta_name">L2 CTA button label<span class="req">*</span></label>
+      <input type="text" id="l2_cta_name" name="l2_cta_name" placeholder="e.g. Shop Now" maxlength="20">
+
+      <label for="l2_cta_url">Call to action URL<span class="req">*</span></label>
+      <input type="url" id="l2_cta_url" name="l2_cta_url" placeholder="https://...">
+    </div>
+
+    <div class="panel">
+      <div class="actions">
+        <button type="submit" class="btn btn-filter" id="save-btn">Save campaign details</button>
+        <button type="button" class="btn btn-refresh" id="generate-btn" disabled>Generate campaign button name</button>
+      </div>
+      <div class="msg" id="form-msg"></div>
+
+      <div class="result-box" id="result-box">
+        <div class="label">Campaign button name</div>
+        <div class="button-name" id="result-button-name">—</div>
+        <div class="warn">⚠ Pass this exact value in the <strong>Onexaura Button&nbsp;ID</strong> field to run this campaign to end users.</div>
+      </div>
+    </div>
+  </form>
+
+</div>
+<script src="create.js"></script>
+</body>
+</html>
