@@ -202,3 +202,72 @@ as $$
   order by c.clicked_at desc
   limit p_page_size offset (p_page - 1) * p_page_size;
 $$;
+
+-- Returns one row per CLICK (not per link) for a single exact
+-- campaign_button_name, with the link's own stats repeated on every row --
+-- used by the row-level "Download" button on the Clicker Data summary table.
+-- Links with zero clicks still appear once, with the click columns blank.
+create or replace function get_campaign_click_detail(
+  p_campaign_button_name text,
+  p_page int default 1,
+  p_page_size int default 1000
+)
+returns table (
+  mobile_number text,
+  code text,
+  long_url text,
+  total_clicks bigint,
+  unique_clicks bigint,
+  last_clicked_at timestamptz,
+  created_at timestamptz,
+  clicked_at timestamptz,
+  ip text,
+  city text,
+  country text,
+  user_agent text,
+  total_count bigint
+)
+language sql
+stable
+as $$
+  with target_links as (
+    select l.*
+    from links l
+    where l.campaign_button_name = p_campaign_button_name
+  ),
+  link_stats as (
+    select
+      tl.id,
+      count(c.id)             as total_clicks,
+      count(distinct c.ip)    as unique_clicks,
+      max(c.clicked_at)       as last_clicked_at
+    from target_links tl
+    left join clicks c on c.link_id = tl.id
+    group by tl.id
+  ),
+  joined as (
+    select
+      tl.mobile_number,
+      tl.code,
+      tl.long_url,
+      ls.total_clicks,
+      ls.unique_clicks,
+      ls.last_clicked_at,
+      tl.created_at,
+      c.clicked_at,
+      c.ip,
+      c.city,
+      c.country,
+      c.user_agent
+    from target_links tl
+    join link_stats ls on ls.id = tl.id
+    left join clicks c on c.link_id = tl.id
+  ),
+  counted as (
+    select count(*) as total_count from joined
+  )
+  select j.*, (select total_count from counted)
+  from joined j
+  order by j.created_at desc, j.clicked_at desc nulls last
+  limit p_page_size offset (p_page - 1) * p_page_size;
+$$;
