@@ -271,3 +271,32 @@ as $$
   order by j.created_at desc, j.clicked_at desc nulls last
   limit p_page_size offset (p_page - 1) * p_page_size;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Login module
+-- ---------------------------------------------------------------------------
+create table if not exists users (
+  id uuid primary key default gen_random_uuid(),
+  email text unique not null,
+  password_hash text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_users_email on users(email);
+
+-- Verifies a login attempt entirely inside Postgres via pgcrypto's crypt() --
+-- the plaintext password is never compared in application code.
+create or replace function verify_user_login(p_email text, p_password text)
+returns table (id uuid, email text)
+language sql
+stable
+as $$
+  select id, email
+  from users
+  where email = p_email
+    and password_hash = crypt(p_password, password_hash);
+$$;
+
+-- Create your first login (run once, with your own email/password):
+-- insert into users (email, password_hash)
+-- values ('admin@example.com', crypt('choose-a-strong-password', gen_salt('bf')));

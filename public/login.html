@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Login</title>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Manrope', sans-serif;
+      height: 100vh;
+      display: flex;
+      background: linear-gradient(to right, #D56269 50%, #FFE2E3 50%);
+    }
+    .container {
+      margin: auto;
+      width: 80%;
+      max-width: 1000px;
+      background: rgba(255,255,255,0.75);
+      backdrop-filter: blur(8px);
+      border-radius: 14px;
+      display: flex;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+    }
+    .left {
+      flex: 1;
+      padding: 35px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .left img {
+      width: 100%;
+      max-width: 320px;
+      margin-bottom: 15px;
+    }
+    .left h2 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1f1f1f;
+      margin-bottom: 8px;
+    }
+    .left p {
+      font-size: 13px;
+      color: #6b6b6b;
+      line-height: 1.5;
+      max-width: 400px;
+    }
+    .right {
+      flex: 1;
+      padding: 35px;
+      background: rgba(255,255,255,0.9);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .right h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 24px;
+      color: #1f1f1f;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      border: none;
+      background: #e9edf3;
+      font-size: 14px;
+    }
+    .terms-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      font-size: 13px;
+    }
+    .terms-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      color: #1f1f1f;
+    }
+    .terms-left input {
+      margin: 0;
+    }
+    .terms-row a {
+      text-decoration: none;
+      color: #777;
+      font-size: 12px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      background: #D56269;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #c14f56;
+    }
+    .error {
+      color: red;
+      font-size: 12px;
+      margin-bottom: 10px;
+      text-align: center;
+      min-height: 14px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <!-- LEFT -->
+  <div class="left">
+    <img src="https://warcssm.1xtel.co/media/media/7a9e93e6-8300-49d9-90d0-04590d2e1420/mkt_vector-removebg-preview.png">
+    
+    <h2>Messaging solutions to scale your business</h2>
+    
+    <p>
+      SMS Solution with end-to-end encryption. DLT Friendly. Realtime analytics.
+      Multiple API compatibility. Intelligent operator routing.
+      Auto-scaling system.
+    </p>
+  </div>
+  <!-- RIGHT -->
+  <div class="right">
+    <h2>Sign In</h2>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
+    <div class="terms-row">
+      <div class="terms-left">
+        <input type="checkbox" checked>
+        <span>I accept the Terms and Conditions</span>
+      </div>
+      <a href="#">Forgot Password?</a>
+    </div>
+    <div id="error" class="error"></div>
+    <button id="loginBtn" onclick="handleLogin()">Sign In →</button>
+  </div>
+</div>
+<script src="/js/login.js"></script>
+<script>
+async function handleLogin() {
+  const btn = document.getElementById("loginBtn");
+  btn.innerText = "Logging in...";
+  btn.disabled = true;
+  await login();
+  btn.innerText = "Sign In →";
+  btn.disabled = false;
+}
+</script>
+</body>
+</html>
