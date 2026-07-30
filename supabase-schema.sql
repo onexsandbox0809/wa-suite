@@ -81,10 +81,15 @@ alter table campaigns enable row level security;
 
 -- Summary: one row per campaign_button_name, with click/recipient totals.
 -- "Unique" = distinct mobile numbers that were sent a link (recipient-level,
--- per your instruction), not distinct IPs.
+-- per your instruction), not distinct IPs. Ordered newest-activity-first.
+-- p_start_date/p_end_date optionally scope which CLICKS count toward
+-- total_clicks/last_click (via the JOIN condition, not a WHERE clause) --
+-- total_links/unique_mobiles are unaffected by the date range.
 create or replace function get_click_summary(
   p_mobile text default null,
-  p_campaign_button_name text default null
+  p_campaign_button_name text default null,
+  p_start_date timestamptz default null,
+  p_end_date timestamptz default null
 )
 returns table (
   campaign_button_name text,
@@ -103,23 +108,29 @@ as $$
     count(distinct l.mobile_number)                            as unique_mobiles,
     max(c.clicked_at)                                          as last_click
   from links l
-  left join clicks c on c.link_id = l.id
+  left join clicks c
+    on c.link_id = l.id
+    and (p_start_date is null or c.clicked_at >= p_start_date)
+    and (p_end_date is null or c.clicked_at <= p_end_date)
   where (p_mobile is null or l.mobile_number ilike '%' || p_mobile || '%')
     and (p_campaign_button_name is null or l.campaign_button_name ilike '%' || p_campaign_button_name || '%')
   group by coalesce(l.campaign_button_name, '(no campaign button)')
-  order by total_clicks desc nulls last;
+  order by max(c.clicked_at) desc nulls last, count(c.id) desc;
 $$;
 
 -- Paginated link-level report (one row per short link / recipient), with
 -- click counts computed per-row via a LATERAL join — so Postgres only
 -- aggregates clicks for the rows actually being returned on this page,
--- not the entire clicks table.
+-- not the entire clicks table. p_start_date/p_end_date optionally scope
+-- the click stats the same way as get_click_summary above.
 create or replace function get_links_report(
   p_mobile text default null,
   p_campaign_button_name text default null,
   p_exact boolean default false,
   p_page int default 1,
-  p_page_size int default 25
+  p_page_size int default 25,
+  p_start_date timestamptz default null,
+  p_end_date timestamptz default null
 )
 returns table (
   id uuid,
@@ -164,6 +175,8 @@ as $$
       max(c.clicked_at)     as last_clicked_at
     from clicks c
     where c.link_id = f.id
+      and (p_start_date is null or c.clicked_at >= p_start_date)
+      and (p_end_date is null or c.clicked_at <= p_end_date)
   ) cs on true
   order by f.created_at desc
   limit p_page_size offset (p_page - 1) * p_page_size;
@@ -210,7 +223,9 @@ $$;
 create or replace function get_campaign_click_detail(
   p_campaign_button_name text,
   p_page int default 1,
-  p_page_size int default 1000
+  p_page_size int default 1000,
+  p_start_date timestamptz default null,
+  p_end_date timestamptz default null
 )
 returns table (
   mobile_number text,
@@ -242,7 +257,10 @@ as $$
       count(distinct c.ip)    as unique_clicks,
       max(c.clicked_at)       as last_clicked_at
     from target_links tl
-    left join clicks c on c.link_id = tl.id
+    left join clicks c
+      on c.link_id = tl.id
+      and (p_start_date is null or c.clicked_at >= p_start_date)
+      and (p_end_date is null or c.clicked_at <= p_end_date)
     group by tl.id
   ),
   joined as (
@@ -261,7 +279,10 @@ as $$
       c.user_agent
     from target_links tl
     join link_stats ls on ls.id = tl.id
-    left join clicks c on c.link_id = tl.id
+    left join clicks c
+      on c.link_id = tl.id
+      and (p_start_date is null or c.clicked_at >= p_start_date)
+      and (p_end_date is null or c.clicked_at <= p_end_date)
   ),
   counted as (
     select count(*) as total_count from joined

@@ -4,6 +4,8 @@ const summaryLoading = document.getElementById('summary-loading');
 
 const fMobile = document.getElementById('f_mobile');
 const fCampaignButton = document.getElementById('f_campaign_button');
+const fStartDate = document.getElementById('f_start_date');
+const fEndDate = document.getElementById('f_end_date');
 
 const exportCsvLink = document.getElementById('export-csv');
 const exportXlsxLink = document.getElementById('export-xlsx');
@@ -17,21 +19,31 @@ function fmtDate(iso) { return iso ? new Date(iso).toLocaleString() : '—'; }
 function fmtNum(n) { return (n ?? 0).toLocaleString(); }
 
 function currentFilters() {
-  return { mobile: fMobile.value.trim(), campaign_button_name: fCampaignButton.value.trim() };
+  return {
+    mobile: fMobile.value.trim(),
+    campaign_button_name: fCampaignButton.value.trim(),
+    start_date: fStartDate.value,
+    end_date: fEndDate.value,
+  };
 }
 
 // Top-of-page export buttons -> SUMMARY report (matches the table on screen)
 function buildSummaryExportHref(format) {
-  const { mobile, campaign_button_name } = currentFilters();
+  const { mobile, campaign_button_name, start_date, end_date } = currentFilters();
   const params = new URLSearchParams({ format });
   if (mobile) params.set('mobile', mobile);
   if (campaign_button_name) params.set('campaign_button_name', campaign_button_name);
+  if (start_date) params.set('start_date', start_date);
+  if (end_date) params.set('end_date', end_date);
   return `/api/export/summary?${params.toString()}`;
 }
 
 // Per-row Report buttons -> full detail report for that exact campaign button
 function buildDetailExportHref(buttonName, format) {
+  const { start_date, end_date } = currentFilters();
   const params = new URLSearchParams({ campaign_button_name: buttonName, format });
+  if (start_date) params.set('start_date', start_date);
+  if (end_date) params.set('end_date', end_date);
   return `/api/export/campaign-detail?${params.toString()}`;
 }
 
@@ -47,10 +59,12 @@ async function loadSummary() {
   summaryBody.innerHTML = '';
   refreshExportLinks();
 
-  const { mobile, campaign_button_name } = currentFilters();
+  const { mobile, campaign_button_name, start_date, end_date } = currentFilters();
   const params = new URLSearchParams();
   if (mobile) params.set('mobile', mobile);
   if (campaign_button_name) params.set('campaign_button_name', campaign_button_name);
+  if (start_date) params.set('start_date', start_date);
+  if (end_date) params.set('end_date', end_date);
 
   try {
     const res = await fetch(`/api/click-summary?${params.toString()}`);
@@ -120,12 +134,15 @@ async function toggleDrilldown(buttonName, summaryTr) {
   summaryTr.insertAdjacentElement('afterend', tr);
 
   try {
+    const { start_date, end_date } = currentFilters();
     const params = new URLSearchParams({
       campaign_button_name: buttonName,
       exact: 'true',
       page: '1',
       pageSize: '50',
     });
+    if (start_date) params.set('start_date', start_date);
+    if (end_date) params.set('end_date', end_date);
     const res = await fetch(`/api/links?${params.toString()}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to load recipients');
@@ -268,9 +285,11 @@ document.getElementById('apply-filters').addEventListener('click', loadSummary);
 document.getElementById('clear-filters').addEventListener('click', () => {
   fMobile.value = '';
   fCampaignButton.value = '';
+  fStartDate.value = '';
+  fEndDate.value = '';
   loadSummary();
 });
-[fMobile, fCampaignButton].forEach((el) => el.addEventListener('keydown', (e) => {
+[fMobile, fCampaignButton, fStartDate, fEndDate].forEach((el) => el.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); loadSummary(); }
 }));
 

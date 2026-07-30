@@ -1,4 +1,5 @@
 import { supabase } from '../../../../lib/supabaseClient';
+import { toDateRangeBounds } from '../../../../lib/dateRange';
 
 export const runtime = 'nodejs';
 
@@ -20,10 +21,12 @@ function formatDate(iso) { return iso ? new Date(iso).toISOString() : ''; }
 
 // Summary rows are naturally small (one per campaign button name), so no
 // pagination/cap is needed here -- this always returns the complete set.
-async function fetchSummary(mobile, campaignButtonName) {
+async function fetchSummary(mobile, campaignButtonName, start, end) {
   const { data, error } = await supabase.rpc('get_click_summary', {
     p_mobile: mobile,
     p_campaign_button_name: campaignButtonName,
+    p_start_date: start,
+    p_end_date: end,
   });
   if (error) throw new Error(error.message);
   return data || [];
@@ -34,11 +37,12 @@ export async function GET(request) {
   const format = (searchParams.get('format') || 'csv').toLowerCase();
   const mobile = searchParams.get('mobile') || null;
   const campaignButtonName = searchParams.get('campaign_button_name') || null;
+  const { start, end } = toDateRangeBounds(searchParams.get('start_date'), searchParams.get('end_date'));
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 
   let rows;
   try {
-    rows = await fetchSummary(mobile, campaignButtonName);
+    rows = await fetchSummary(mobile, campaignButtonName, start, end);
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,

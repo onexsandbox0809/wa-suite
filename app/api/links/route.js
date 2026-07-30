@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '../../../lib/supabaseClient';
+import { toDateRangeBounds } from '../../../lib/dateRange';
 
 // Paginated, DB-side-aggregated link report. Backed by the get_links_report()
 // Postgres function so this stays fast at any scale -- it only ever
@@ -12,6 +13,7 @@ export async function GET(request) {
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
   const requestedSize = parseInt(searchParams.get('pageSize') || '25', 10);
   const pageSize = Math.min(100, Math.max(1, requestedSize || 25));
+  const { start, end } = toDateRangeBounds(searchParams.get('start_date'), searchParams.get('end_date'));
 
   const { data, error } = await supabase.rpc('get_links_report', {
     p_mobile: mobile,
@@ -19,6 +21,8 @@ export async function GET(request) {
     p_exact: exact,
     p_page: page,
     p_page_size: pageSize,
+    p_start_date: start,
+    p_end_date: end,
   });
 
   if (error) {
