@@ -8,7 +8,7 @@ const fCampaignButton = document.getElementById('f_campaign_button');
 const exportCsvLink = document.getElementById('export-csv');
 const exportXlsxLink = document.getElementById('export-xlsx');
 
-let openRowKey = null; // currently expanded campaign_button_name, or null
+const SUMMARY_COLSPAN = 7;
 
 function escapeHtml(s) {
   return (s ?? '').toString().replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -20,17 +20,24 @@ function currentFilters() {
   return { mobile: fMobile.value.trim(), campaign_button_name: fCampaignButton.value.trim() };
 }
 
-function buildExportHref(format) {
+// Top-of-page export buttons -> SUMMARY report (matches the table on screen)
+function buildSummaryExportHref(format) {
   const { mobile, campaign_button_name } = currentFilters();
   const params = new URLSearchParams({ format });
   if (mobile) params.set('mobile', mobile);
   if (campaign_button_name) params.set('campaign_button_name', campaign_button_name);
-  return `/api/export/links?${params.toString()}`;
+  return `/api/export/summary?${params.toString()}`;
+}
+
+// Per-row Report buttons -> full detail report for that exact campaign button
+function buildDetailExportHref(buttonName, format) {
+  const params = new URLSearchParams({ campaign_button_name: buttonName, format });
+  return `/api/export/campaign-detail?${params.toString()}`;
 }
 
 function refreshExportLinks() {
-  exportCsvLink.href = buildExportHref('csv');
-  exportXlsxLink.href = buildExportHref('xlsx');
+  exportCsvLink.href = buildSummaryExportHref('csv');
+  exportXlsxLink.href = buildSummaryExportHref('xlsx');
 }
 
 // ---------------- Summary (grouped by campaign_button_name) ----------------
@@ -70,12 +77,17 @@ function renderSummary(rows) {
     tr.dataset.button = row.campaign_button_name;
     tr.innerHTML = `
       <td><span class="chevron">▶</span></td>
-      <td style="font-family: var(--mono); font-size: 12px;">${escapeHtml(row.campaign_button_name)}</td>
+      <td style="font-family: var(--mono); font-size: 12px;" title="${escapeHtml(row.campaign_button_name)}">${escapeHtml(row.campaign_button_name)}</td>
       <td class="num">${fmtNum(row.total_links)}</td>
       <td class="num"><span class="badge cta">${fmtNum(row.total_clicks)}</span></td>
       <td class="num">${fmtNum(row.unique_mobiles)}</td>
-      <td>${fmtDate(row.last_click)}</td>
+      <td title="${escapeHtml(fmtDate(row.last_click))}">${fmtDate(row.last_click)}</td>
+      <td class="report-cell">
+        <a class="btn btn-neutral btn-xs" href="${buildDetailExportHref(row.campaign_button_name, 'csv')}" title="Download detail report (CSV) for this campaign button">CSV</a>
+        <a class="btn btn-neutral btn-xs" href="${buildDetailExportHref(row.campaign_button_name, 'xlsx')}" title="Download detail report (Excel, capped 50k) for this campaign button">Excel</a>
+      </td>
     `;
+    tr.querySelectorAll('.report-cell a').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
     tr.addEventListener('click', () => toggleDrilldown(row.campaign_button_name, tr));
     summaryBody.appendChild(tr);
   });
@@ -89,7 +101,6 @@ async function toggleDrilldown(buttonName, summaryTr) {
   if (existing) {
     existing.remove();
     chevron.classList.remove('open');
-    if (openRowKey === buttonName) openRowKey = null;
     return;
   }
 
@@ -98,13 +109,12 @@ async function toggleDrilldown(buttonName, summaryTr) {
   document.querySelectorAll('.chevron.open').forEach((el) => el.classList.remove('open'));
 
   chevron.classList.add('open');
-  openRowKey = buttonName;
 
   const tr = document.createElement('tr');
   tr.className = 'drill-row';
   tr.id = `drill-${cssId(buttonName)}`;
   const td = document.createElement('td');
-  td.colSpan = 6;
+  td.colSpan = SUMMARY_COLSPAN;
   td.innerHTML = `<div class="drill-wrap loading">Loading recipients…</div>`;
   tr.appendChild(td);
   summaryTr.insertAdjacentElement('afterend', tr);
@@ -119,7 +129,7 @@ async function toggleDrilldown(buttonName, summaryTr) {
     const res = await fetch(`/api/links?${params.toString()}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to load recipients');
-    td.innerHTML = renderDrilldownTable(data.links || [], data.total || 0);
+    td.innerHTML = renderDrilldownTable(data.links || [], data.total || 0, buttonName);
     wireDetailButtons(td);
   } catch (err) {
     td.innerHTML = `<div class="drill-wrap"><span style="color:#b91c1c;">Error: ${escapeHtml(err.message)}</span></div>`;
@@ -128,7 +138,7 @@ async function toggleDrilldown(buttonName, summaryTr) {
 
 function cssId(s) { return (s || '').replace(/[^a-zA-Z0-9_-]/g, '_'); }
 
-function renderDrilldownTable(links, total) {
+function renderDrilldownTable(links, total, buttonName) {
   if (!links.length) {
     return `<div class="drill-wrap"><span class="muted">No recipients found.</span></div>`;
   }
@@ -136,25 +146,28 @@ function renderDrilldownTable(links, total) {
     const shortUrl = `${window.location.origin}/${l.code}`;
     return `
       <tr>
-        <td>${escapeHtml(l.mobile_number || '—')}</td>
-        <td><a href="${escapeHtml(shortUrl)}" target="_blank" rel="noreferrer">${escapeHtml(shortUrl.replace(/^https?:\/\//, ''))}</a></td>
-        <td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(l.long_url)}">${escapeHtml(l.long_url)}</td>
+        <td title="${escapeHtml(l.mobile_number || '')}">${escapeHtml(l.mobile_number || '—')}</td>
+        <td><a href="${escapeHtml(shortUrl)}" target="_blank" rel="noreferrer" title="${escapeHtml(shortUrl)}">${escapeHtml(shortUrl.replace(/^https?:\/\//, ''))}</a></td>
+        <td title="${escapeHtml(l.long_url)}">${escapeHtml(l.long_url)}</td>
         <td class="num">${fmtNum(l.total_clicks)}</td>
         <td class="num">${fmtNum(l.unique_clicks)}</td>
-        <td>${fmtDate(l.last_clicked_at)}</td>
-        <td>${fmtDate(l.created_at)}</td>
+        <td title="${escapeHtml(fmtDate(l.last_clicked_at))}">${fmtDate(l.last_clicked_at)}</td>
+        <td title="${escapeHtml(fmtDate(l.created_at))}">${fmtDate(l.created_at)}</td>
         <td><button class="btn btn-outline-blue btn-sm" data-action="details" data-code="${escapeHtml(l.code)}" data-mobile="${escapeHtml(l.mobile_number || '')}">Show Details</button></td>
       </tr>
     `;
   }).join('');
 
   const note = total > links.length
-    ? `<div class="hint" style="margin-top:8px;">Showing first ${links.length.toLocaleString()} of ${total.toLocaleString()} recipients. Use the filters above or export to CSV for the complete list.</div>`
+    ? `<div class="hint" style="margin-top:8px;">Showing first ${links.length.toLocaleString()} of ${total.toLocaleString()} recipients. Use the "CSV"/"Excel" buttons on this row above for the complete list.</div>`
     : '';
 
   return `
     <div class="drill-wrap">
-      <table>
+      <table class="drill-table">
+        <colgroup>
+          <col class="c-mobile"><col class="c-short"><col class="c-dest"><col class="c-num"><col class="c-num"><col class="c-date"><col class="c-date"><col class="c-action">
+        </colgroup>
         <thead>
           <tr>
             <th>Mobile</th><th>Short link</th><th>Destination</th>
@@ -217,8 +230,8 @@ async function loadModalPage() {
         <td>${fmtDate(c.clicked_at)}</td>
         <td>${escapeHtml(c.ip || '—')}</td>
         <td>${escapeHtml([c.city, c.country].filter(Boolean).join(', ') || '—')}</td>
-        <td>${escapeHtml(c.referrer || '—')}</td>
-        <td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(c.user_agent || '')}">${escapeHtml(c.user_agent || '—')}</td>
+        <td title="${escapeHtml(c.referrer || '')}">${escapeHtml(c.referrer || '—')}</td>
+        <td title="${escapeHtml(c.user_agent || '')}">${escapeHtml(c.user_agent || '—')}</td>
       </tr>
     `).join('');
 
