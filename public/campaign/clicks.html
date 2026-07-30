@@ -8,16 +8,40 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <style>
+  /* This page is data-dense, so it gets more width than the 900px form pages. */
+  .main { max-width: 1520px; }
+
+  table { table-layout: fixed; width: 100%; }
+  th, td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  th, td { padding: 10px 10px; }
+
+  /* Summary table column widths */
+  #summary-table col.col-chevron { width: 28px; }
+  #summary-table col.col-button  { width: 30%; }
+  #summary-table col.col-num     { width: 9%; }
+  #summary-table col.col-date    { width: 15%; }
+  #summary-table col.col-report  { width: 12%; }
+
   .summary-row { cursor: pointer; }
   .summary-row:hover { background: #fafafa; }
   .drill-row td { background: #fafafa; padding: 0; }
-  .drill-wrap { padding: 12px 16px 16px; }
-  .chevron { display: inline-block; transition: transform 0.15s; margin-right: 8px; color: #9ca3af; }
+  .drill-wrap { padding: 14px 18px 18px; overflow-x: auto; }
+  .chevron { display: inline-block; transition: transform 0.15s; color: #9ca3af; }
   .chevron.open { transform: rotate(90deg); }
   .num { font-variant-numeric: tabular-nums; text-align: right; }
-  .filters .field.export-bar { flex-direction: row; gap: 8px; margin-left: auto; }
+  .btn-xs { padding: 4px 8px; font-size: 11px; margin-right: 4px; }
+  .report-cell { white-space: nowrap; overflow: visible; }
   .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 10px 4px 0; font-size: 13px; color: #6b7280; }
   .muted { color: var(--text-dim); font-size: 13px; }
+  .filters .field.export-bar { flex-direction: row; gap: 8px; margin-left: auto; }
+
+  /* Drill-down (per-recipient) table column widths */
+  .drill-table col.c-mobile  { width: 13%; }
+  .drill-table col.c-short   { width: 13%; }
+  .drill-table col.c-dest    { width: 22%; }
+  .drill-table col.c-num     { width: 7%; }
+  .drill-table col.c-date    { width: 15%; }
+  .drill-table col.c-action  { width: 12%; }
 </style>
 </head>
 <body>
@@ -35,6 +59,71 @@
 
   <div class="header">
     <h3>Clicker Data</h3>
+  </div>
+  <p class="subtitle">Who clicked, how many times, and when — grouped by campaign button name.</p>
+
+  <div class="panel">
+    <div class="filters">
+      <div class="field grow">
+        <label for="f_mobile">Mobile number</label>
+        <input type="text" id="f_mobile" placeholder="Search by mobile number…">
+      </div>
+      <div class="field grow">
+        <label for="f_campaign_button">Campaign button name</label>
+        <input type="text" id="f_campaign_button" placeholder="Search by campaign button name…">
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button type="button" class="btn btn-filter" id="apply-filters">Apply</button>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button type="button" class="btn btn-neutral" id="clear-filters">Clear</button>
+      </div>
+      <div class="field export-bar">
+        <a class="btn btn-download" id="export-csv" href="#" title="Summary shown below, streamed as CSV, any size">Download CSV</a>
+        <a class="btn btn-download" id="export-xlsx" href="#" title="Summary shown below, capped at 50,000 rows">Download Excel</a>
+      </div>
+    </div>
+
+    <div id="summary-wrap" style="margin-top: 18px;">
+      <table id="summary-table">
+        <colgroup>
+          <col class="col-chevron"><col class="col-button"><col class="col-num"><col class="col-num"><col class="col-num"><col class="col-date"><col class="col-report">
+        </colgroup>
+        <thead>
+          <tr>
+            <th></th>
+            <th>Campaign button</th>
+            <th class="num">Links sent</th>
+            <th class="num">Total clicks</th>
+            <th class="num">Unique recipients</th>
+            <th>Last click</th>
+            <th>Report</th>
+          </tr>
+        </thead>
+        <tbody id="summary-body"></tbody>
+      </table>
+      <div class="empty-state" id="summary-empty" style="display:none;">No click data matches these filters.</div>
+      <div class="loading" id="summary-loading">Loading summary…</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Individual click details modal -->
+<div class="modal-overlay" id="details-modal">
+  <div class="modal">
+    <button class="btn-ghost modal-close" id="close-modal">Close ✕</button>
+    <h2 id="modal-title" style="margin-top:4px;">Click details</h2>
+    <div id="modal-body"></div>
+    <div class="pager" id="modal-pager"></div>
+  </div>
+</div>
+
+<script src="clicks.js"></script>
+</body>
+</html>    <h3>Clicker Data</h3>
   </div>
   <p class="subtitle">Who clicked, how many times, and when — grouped by campaign button name.</p>
 
