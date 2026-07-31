@@ -3,9 +3,10 @@ import { supabase } from '../../../../lib/supabaseClient';
 import { toDateRangeBounds } from '../../../../lib/dateRange';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60; // seconds -- max allowed on Vercel Hobby; Pro/Enterprise allow up to 300s
 
-const BATCH_SIZE = 1000;
-const XLSX_CAP = 50000;
+const BATCH_SIZE = 5000; // fewer round trips for very large exports
+const XLSX_CAP = 150000; // comfortably covers 100k+ rows
 
 const COLUMNS = [
   { key: 'mobile_number', header: 'Mobile' },

@@ -2,6 +2,7 @@ import { supabase } from '../../../../lib/supabaseClient';
 import { toDateRangeBounds } from '../../../../lib/dateRange';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 const COLUMNS = [
   { key: 'button_name', header: 'Campaign Button' },
