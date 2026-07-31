@@ -22,11 +22,12 @@ function csvEscape(v) {
 }
 function formatDate(iso) { return iso ? new Date(iso).toISOString() : ''; }
 
-async function fetchSummary(buttonName, start, end) {
+async function fetchSummary(buttonName, start, end, mobileNumber) {
   const { data, error } = await supabase.rpc('get_button_vs_url_summary', {
     p_button_name: buttonName,
     p_start_date: start,
     p_end_date: end,
+    p_mobile_number: mobileNumber,
   });
   if (error) throw new Error(error.message);
   return data || [];
@@ -36,12 +37,13 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const format = (searchParams.get('format') || 'csv').toLowerCase();
   const buttonName = searchParams.get('button_name') || null;
+  const mobileNumber = searchParams.get('mobile_number') || null;
   const { start, end } = toDateRangeBounds(searchParams.get('start_date'), searchParams.get('end_date'));
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 
   let rows;
   try {
-    rows = await fetchSummary(buttonName, start, end);
+    rows = await fetchSummary(buttonName, start, end, mobileNumber);
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,

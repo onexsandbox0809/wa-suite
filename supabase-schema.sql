@@ -356,7 +356,8 @@ create index if not exists idx_button_clicks_clicked_at on button_clicks(clicked
 create or replace function get_button_vs_url_summary(
   p_button_name text default null,
   p_start_date timestamptz default null,
-  p_end_date timestamptz default null
+  p_end_date timestamptz default null,
+  p_mobile_number text default null
 )
 returns table (
   button_name text,
@@ -377,6 +378,7 @@ as $$
     where (p_button_name is null or button_name ilike '%' || p_button_name || '%')
       and (p_start_date is null or clicked_at >= p_start_date)
       and (p_end_date is null or clicked_at <= p_end_date)
+      and (p_mobile_number is null or mobile_number ilike '%' || p_mobile_number || '%')
   ),
   bc_agg as (
     select
@@ -395,6 +397,7 @@ as $$
       and (p_button_name is null or l.campaign_button_name ilike '%' || p_button_name || '%')
       and (p_start_date is null or c.clicked_at >= p_start_date)
       and (p_end_date is null or c.clicked_at <= p_end_date)
+      and (p_mobile_number is null or l.mobile_number ilike '%' || p_mobile_number || '%')
   ),
   url_agg as (
     select

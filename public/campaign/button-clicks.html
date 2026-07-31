@@ -60,10 +60,17 @@
 
   <div class="panel">
     <div class="callout" style="margin-bottom: 16px;">
-      Analytics Report for Button Click v/s URL Clicks
+      A "button click" is logged every time your automation calls
+      <code>GET /api/campaign-details</code> for a button. For per-recipient
+      drop-off (below), that call also needs <code>&amp;mobile_number=...</code> --
+      without it, only the aggregate totals are accurate, not who specifically didn't click.
     </div>
 
     <div class="filters">
+      <div class="field grow">
+        <label for="f_mobile">Mobile number</label>
+        <input type="text" id="f_mobile" placeholder="Search by mobile number…">
+      </div>
       <div class="field grow">
         <label for="f_button">Campaign button name</label>
         <input type="text" id="f_button" placeholder="Search by campaign button name…">

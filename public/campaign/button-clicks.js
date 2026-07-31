@@ -2,6 +2,7 @@ const summaryBody = document.getElementById('summary-body');
 const summaryEmpty = document.getElementById('summary-empty');
 const summaryLoading = document.getElementById('summary-loading');
 
+const fMobile = document.getElementById('f_mobile');
 const fButton = document.getElementById('f_button');
 const fStartDate = document.getElementById('f_start_date');
 const fEndDate = document.getElementById('f_end_date');
@@ -20,6 +21,7 @@ function cssId(s) { return (s || '').replace(/[^a-zA-Z0-9_-]/g, '_'); }
 
 function currentFilters() {
   return {
+    mobile_number: fMobile.value.trim(),
     button_name: fButton.value.trim(),
     start_date: fStartDate.value,
     end_date: fEndDate.value,
@@ -27,8 +29,9 @@ function currentFilters() {
 }
 
 function buildSummaryExportHref(format) {
-  const { button_name, start_date, end_date } = currentFilters();
+  const { mobile_number, button_name, start_date, end_date } = currentFilters();
   const params = new URLSearchParams({ format });
+  if (mobile_number) params.set('mobile_number', mobile_number);
   if (button_name) params.set('button_name', button_name);
   if (start_date) params.set('start_date', start_date);
   if (end_date) params.set('end_date', end_date);
@@ -54,8 +57,9 @@ async function loadSummary() {
   summaryBody.innerHTML = '';
   refreshExportLinks();
 
-  const { button_name, start_date, end_date } = currentFilters();
+  const { mobile_number, button_name, start_date, end_date } = currentFilters();
   const params = new URLSearchParams();
+  if (mobile_number) params.set('mobile_number', mobile_number);
   if (button_name) params.set('button_name', button_name);
   if (start_date) params.set('start_date', start_date);
   if (end_date) params.set('end_date', end_date);
@@ -171,12 +175,13 @@ function renderDrilldownTable(recipients, total) {
 
 document.getElementById('apply-filters').addEventListener('click', loadSummary);
 document.getElementById('clear-filters').addEventListener('click', () => {
+  fMobile.value = '';
   fButton.value = '';
   fStartDate.value = '';
   fEndDate.value = '';
   loadSummary();
 });
-[fButton, fStartDate, fEndDate].forEach((el) => el.addEventListener('keydown', (e) => {
+[fMobile, fButton, fStartDate, fEndDate].forEach((el) => el.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); loadSummary(); }
 }));
 
