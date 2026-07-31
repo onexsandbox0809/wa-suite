@@ -321,3 +321,167 @@ $$;
 -- Create your first login (run once, with your own email/password):
 -- insert into users (email, password_hash)
 -- values ('admin@example.com', crypt('choose-a-strong-password', gen_salt('bf')));
+-- ============================================================================
+-- MIGRATION v5 -- "Button Click vs URL Clicks" report
+--
+-- The WhatsApp button click itself isn't something we can observe directly
+-- (WhatsApp doesn't tell us) -- but every button tap triggers your
+-- automation to call GET /api/campaign-details?button_name=..., so THAT call
+-- is used as the "button click" signal. This migration adds a table to log
+-- each of those calls, plus the reporting functions for the new tab.
+--
+-- Safe to re-run (CREATE OR REPLACE / IF NOT EXISTS everywhere).
+-- ============================================================================
+
+create table if not exists button_clicks (
+  id uuid primary key default gen_random_uuid(),
+  button_name text not null,
+  mobile_number text,  -- optional: only populated if your automation passes it (see note below)
+  clicked_at timestamptz not null default now()
+);
+
+create index if not exists idx_button_clicks_button_name on button_clicks(button_name);
+create index if not exists idx_button_clicks_mobile on button_clicks(mobile_number);
+create index if not exists idx_button_clicks_clicked_at on button_clicks(clicked_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Summary: one row per button_name, comparing button-taps to URL-clicks.
+--
+-- "clicked_button_not_url" is only accurate for recipients whose mobile
+-- number was captured on the button-click event (i.e. your automation calls
+-- campaign-details with &mobile_number=... — see the updated route.js).
+-- Without a mobile number, we can count total button taps but can't tell
+-- WHICH person didn't follow through, only the aggregate gap.
+-- ---------------------------------------------------------------------------
+create or replace function get_button_vs_url_summary(
+  p_button_name text default null,
+  p_start_date timestamptz default null,
+  p_end_date timestamptz default null
+)
+returns table (
+  button_name text,
+  total_button_clicks bigint,
+  unique_button_clickers bigint,
+  total_url_clicks bigint,
+  unique_url_clickers bigint,
+  clicked_button_not_url bigint,
+  last_button_click timestamptz,
+  last_url_click timestamptz
+)
+language sql
+stable
+as $$
+  with bc as (
+    select button_name, mobile_number, clicked_at
+    from button_clicks
+    where (p_button_name is null or button_name ilike '%' || p_button_name || '%')
+      and (p_start_date is null or clicked_at >= p_start_date)
+      and (p_end_date is null or clicked_at <= p_end_date)
+  ),
+  bc_agg as (
+    select
+      button_name,
+      count(*)                                                        as total_button_clicks,
+      count(distinct mobile_number) filter (where mobile_number is not null) as unique_button_clickers,
+      max(clicked_at)                                                 as last_button_click
+    from bc
+    group by button_name
+  ),
+  url as (
+    select l.campaign_button_name as button_name, l.mobile_number, c.clicked_at
+    from links l
+    join clicks c on c.link_id = l.id
+    where l.campaign_button_name is not null
+      and (p_button_name is null or l.campaign_button_name ilike '%' || p_button_name || '%')
+      and (p_start_date is null or c.clicked_at >= p_start_date)
+      and (p_end_date is null or c.clicked_at <= p_end_date)
+  ),
+  url_agg as (
+    select
+      button_name,
+      count(*)                        as total_url_clicks,
+      count(distinct mobile_number)   as unique_url_clickers,
+      max(clicked_at)                 as last_url_click
+    from url
+    group by button_name
+  ),
+  not_converted as (
+    select bc.button_name, count(distinct bc.mobile_number) as clicked_button_not_url
+    from bc
+    where bc.mobile_number is not null
+      and not exists (
+        select 1 from url u where u.button_name = bc.button_name and u.mobile_number = bc.mobile_number
+      )
+    group by bc.button_name
+  )
+  select
+    coalesce(bc_agg.button_name, url_agg.button_name)     as button_name,
+    coalesce(bc_agg.total_button_clicks, 0)                as total_button_clicks,
+    coalesce(bc_agg.unique_button_clickers, 0)             as unique_button_clickers,
+    coalesce(url_agg.total_url_clicks, 0)                  as total_url_clicks,
+    coalesce(url_agg.unique_url_clickers, 0)               as unique_url_clickers,
+    coalesce(nc.clicked_button_not_url, 0)                 as clicked_button_not_url,
+    bc_agg.last_button_click,
+    url_agg.last_url_click
+  from bc_agg
+  full outer join url_agg on url_agg.button_name = bc_agg.button_name
+  left join not_converted nc on nc.button_name = coalesce(bc_agg.button_name, url_agg.button_name)
+  order by greatest(coalesce(bc_agg.last_button_click, 'epoch'), coalesce(url_agg.last_url_click, 'epoch')) desc;
+$$;
+
+-- Drill-down: the actual mobile numbers who tapped the button but never
+-- clicked the URL, for one exact button_name. Only includes button-click
+-- rows that had a mobile_number recorded.
+create or replace function get_button_not_url_detail(
+  p_button_name text,
+  p_page int default 1,
+  p_page_size int default 1000,
+  p_start_date timestamptz default null,
+  p_end_date timestamptz default null
+)
+returns table (
+  mobile_number text,
+  button_taps bigint,
+  first_button_click timestamptz,
+  last_button_click timestamptz,
+  total_count bigint
+)
+language sql
+stable
+as $$
+  with bc as (
+    select mobile_number, clicked_at
+    from button_clicks
+    where button_name = p_button_name
+      and mobile_number is not null
+      and (p_start_date is null or clicked_at >= p_start_date)
+      and (p_end_date is null or clicked_at <= p_end_date)
+  ),
+  bc_agg as (
+    select
+      mobile_number,
+      count(*)           as button_taps,
+      min(clicked_at)    as first_button_click,
+      max(clicked_at)    as last_button_click
+    from bc
+    group by mobile_number
+  ),
+  not_converted as (
+    select ba.*
+    from bc_agg ba
+    where not exists (
+      select 1
+      from links l
+      join clicks c on c.link_id = l.id
+      where l.campaign_button_name = p_button_name
+        and l.mobile_number = ba.mobile_number
+    )
+  ),
+  counted as (
+    select count(*) as total_count from not_converted
+  )
+  select nc.*, (select total_count from counted)
+  from not_converted nc
+  order by nc.last_button_click desc
+  limit p_page_size offset (p_page - 1) * p_page_size;
+$$;

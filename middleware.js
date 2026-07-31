@@ -5,18 +5,19 @@ import { verifySessionToken } from './lib/session';
 const PROTECTED_PAGE_PREFIXES = ['/campaign', '/dashboard'];
 
 // APIs that require login (return 401 JSON if not authenticated). Deliberately
-// does NOT include /api/create or /[code] -- those stay public since they're
-// meant to be called by your own external automation/scripts and by anyone
-// clicking a WhatsApp link, not just logged-in browser sessions.
+// does NOT include /api/create, /api/campaign-details, or /api/campaign-link --
+// those are meant to be called by your own external automation/bot per
+// end-user interaction, not just logged-in browser sessions. /[code] link
+// redirects stay public too, for the same reason.
 const PROTECTED_API_PATHS = [
   '/api/create-campaign',
   '/api/list-campaigns',
-  '/api/campaign-details',
-  '/api/campaign-link',
   '/api/upload-media',
   '/api/click-summary',
   '/api/links',
   '/api/link-clicks',
+  '/api/button-vs-url',
+  '/api/button-vs-url-detail',
 ];
 
 function isProtectedApi(pathname) {
