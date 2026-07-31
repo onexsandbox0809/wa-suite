@@ -9,9 +9,8 @@ const XLSX_CAP = 50000;
 
 const COLUMNS = [
   { key: 'mobile_number', header: 'Mobile' },
-  { key: 'button_taps', header: 'Button Taps' },
-  { key: 'first_button_click', header: 'First Button Click' },
-  { key: 'last_button_click', header: 'Last Button Click' },
+  { key: 'button_click', header: 'Button Click' },
+  { key: 'url_click', header: 'URL Click' },
 ];
 
 function csvEscape(v) {
@@ -24,9 +23,8 @@ function formatDate(iso) { return iso ? new Date(iso).toISOString() : ''; }
 function toRow(r) {
   return {
     mobile_number: r.mobile_number,
-    button_taps: r.button_taps,
-    first_button_click: formatDate(r.first_button_click),
-    last_button_click: formatDate(r.last_button_click),
+    button_click: formatDate(r.button_click),
+    url_click: formatDate(r.url_click), // blank if they tapped the button but never clicked the URL
   };
 }
 
@@ -34,7 +32,7 @@ async function* fetchAllRows(buttonName, hardCap, start, end) {
   let page = 1;
   let fetched = 0;
   while (true) {
-    const { data, error } = await supabase.rpc('get_button_not_url_detail', {
+    const { data, error } = await supabase.rpc('get_button_recipient_detail', {
       p_button_name: buttonName,
       p_page: page,
       p_page_size: BATCH_SIZE,
@@ -71,8 +69,8 @@ export async function GET(request) {
   if (format === 'xlsx') {
     const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Not Converted');
-    sheet.columns = COLUMNS.map((c) => ({ header: c.header, key: c.key, width: 22 }));
+    const sheet = workbook.addWorksheet('Button vs URL Detail');
+    sheet.columns = COLUMNS.map((c) => ({ header: c.header, key: c.key, width: 24 }));
 
     let count = 0;
     let truncated = false;
@@ -95,7 +93,7 @@ export async function GET(request) {
     return new Response(buffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="button-not-url-${safeName}-${stamp}.xlsx"`,
+        'Content-Disposition': `attachment; filename="button-vs-url-detail-${safeName}-${stamp}.xlsx"`,
       },
     });
   }
@@ -119,7 +117,7 @@ export async function GET(request) {
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="button-not-url-${safeName}-${stamp}.csv"`,
+      'Content-Disposition': `attachment; filename="button-vs-url-detail-${safeName}-${stamp}.csv"`,
     },
   });
 }

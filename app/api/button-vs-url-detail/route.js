@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { supabase } from '../../../lib/supabaseClient';
 import { toDateRangeBounds } from '../../../lib/dateRange';
 
+// Full per-recipient view for one button: Mobile | Button Click | URL Click.
+// Includes everyone who tapped the button -- url_click is null for anyone
+// who tapped but never clicked through.
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const buttonName = searchParams.get('button_name');
@@ -14,7 +17,7 @@ export async function GET(request) {
     return NextResponse.json({ error: 'button_name is required' }, { status: 400 });
   }
 
-  const { data, error } = await supabase.rpc('get_button_not_url_detail', {
+  const { data, error } = await supabase.rpc('get_button_recipient_detail', {
     p_button_name: buttonName,
     p_page: page,
     p_page_size: pageSize,

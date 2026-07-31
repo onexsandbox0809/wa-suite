@@ -97,8 +97,8 @@ function renderSummary(rows) {
       <td class="num"><span class="badge gap">${fmtNum(row.clicked_button_not_url)}</span></td>
       <td title="${escapeHtml(fmtDate(lastActivity))}">${fmtDate(lastActivity)}</td>
       <td class="report-cell">
-        <a class="btn btn-neutral btn-xs" href="${buildDetailExportHref(row.button_name, 'csv')}" title="Download the not-converted recipient list (CSV) for this button">CSV</a>
-        <a class="btn btn-neutral btn-xs" href="${buildDetailExportHref(row.button_name, 'xlsx')}" title="Download the not-converted recipient list (Excel, capped 50k) for this button">Excel</a>
+        <a class="btn btn-neutral btn-xs" href="${buildDetailExportHref(row.button_name, 'csv')}" title="Download Mobile/Button Click/URL Click (CSV) for every recipient of this button">CSV</a>
+        <a class="btn btn-neutral btn-xs" href="${buildDetailExportHref(row.button_name, 'xlsx')}" title="Download Mobile/Button Click/URL Click (Excel, capped 50k) for every recipient of this button">Excel</a>
       </td>
     `;
     tr.querySelectorAll('.report-cell a').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
@@ -147,14 +147,13 @@ async function toggleDrilldown(buttonName, summaryTr) {
 
 function renderDrilldownTable(recipients, total) {
   if (!recipients.length) {
-    return `<div class="drill-wrap"><span class="muted">No recipients tapped the button without also clicking the URL — nice conversion. (Or no mobile_number was captured on the button-click events for this button; see the note above.)</span></div>`;
+    return `<div class="drill-wrap"><span class="muted">No mobile_number was captured on the button-click events for this button yet -- pass &mobile_number=... to log-button-click (or campaign-details) to populate this.</span></div>`;
   }
   const rows = recipients.map((r) => `
     <tr>
       <td>${escapeHtml(r.mobile_number || '—')}</td>
-      <td class="num">${fmtNum(r.button_taps)}</td>
-      <td>${fmtDate(r.first_button_click)}</td>
-      <td>${fmtDate(r.last_button_click)}</td>
+      <td>${fmtDate(r.button_click)}</td>
+      <td>${r.url_click ? fmtDate(r.url_click) : '<span class="badge gap">Not clicked</span>'}</td>
     </tr>
   `).join('');
 
@@ -165,7 +164,7 @@ function renderDrilldownTable(recipients, total) {
   return `
     <div class="drill-wrap">
       <table>
-        <thead><tr><th>Mobile</th><th class="num">Button taps</th><th>First tap</th><th>Last tap</th></tr></thead>
+        <thead><tr><th>Mobile</th><th>Button Click</th><th>URL Click</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       ${note}
