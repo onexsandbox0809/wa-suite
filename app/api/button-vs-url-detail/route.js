@@ -3,15 +3,19 @@ import { supabase } from '../../../lib/supabaseClient';
 import { toDateRangeBounds } from '../../../lib/dateRange';
 
 // Full per-recipient view for one button: Mobile | Button Click | URL Click.
-// Includes everyone who tapped the button -- url_click is null for anyone
-// who tapped but never clicked through.
+// Supports a "not clicked only" filter, an in-modal mobile search, and a
+// sort mode -- all backing the recipient browser modal on the Button vs
+// URL page.
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const buttonName = searchParams.get('button_name');
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
-  const requestedSize = parseInt(searchParams.get('pageSize') || '50', 10);
-  const pageSize = Math.min(200, Math.max(1, requestedSize || 50));
+  const requestedSize = parseInt(searchParams.get('pageSize') || '25', 10);
+  const pageSize = Math.min(200, Math.max(1, requestedSize || 25));
   const { start, end } = toDateRangeBounds(searchParams.get('start_date'), searchParams.get('end_date'));
+  const onlyNotClicked = searchParams.get('only_not_clicked') === 'true';
+  const searchMobile = searchParams.get('search_mobile') || null;
+  const sort = searchParams.get('sort') === 'not_clicked_first' ? 'not_clicked_first' : 'recent';
 
   if (!buttonName) {
     return NextResponse.json({ error: 'button_name is required' }, { status: 400 });
@@ -23,6 +27,9 @@ export async function GET(request) {
     p_page_size: pageSize,
     p_start_date: start,
     p_end_date: end,
+    p_only_not_clicked: onlyNotClicked,
+    p_search_mobile: searchMobile,
+    p_sort: sort,
   });
 
   if (error) {

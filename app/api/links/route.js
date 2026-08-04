@@ -14,6 +14,7 @@ export async function GET(request) {
   const requestedSize = parseInt(searchParams.get('pageSize') || '25', 10);
   const pageSize = Math.min(100, Math.max(1, requestedSize || 25));
   const { start, end } = toDateRangeBounds(searchParams.get('start_date'), searchParams.get('end_date'));
+  const sort = searchParams.get('sort') === 'no_clicks_first' ? 'no_clicks_first' : 'recent';
 
   const { data, error } = await supabase.rpc('get_links_report', {
     p_mobile: mobile,
@@ -23,6 +24,7 @@ export async function GET(request) {
     p_page_size: pageSize,
     p_start_date: start,
     p_end_date: end,
+    p_sort: sort,
   });
 
   if (error) {

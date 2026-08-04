@@ -12,25 +12,40 @@
   table { table-layout: fixed; width: 100%; }
   th, td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 10px; }
 
-  #summary-table col.col-chevron { width: 26px; }
-  #summary-table col.col-button  { width: 22%; }
+  #summary-table col.col-button  { width: 24%; }
   #summary-table col.col-num     { width: 10%; }
   #summary-table col.col-gap     { width: 11%; }
-  #summary-table col.col-date    { width: 12%; }
-  #summary-table col.col-report  { width: 11%; }
+  #summary-table col.col-date    { width: 13%; }
+  #summary-table col.col-action  { width: 15%; }
 
-  .summary-row { cursor: pointer; }
   .summary-row:hover { background: #fafafa; }
-  .drill-row td { background: #fafafa; padding: 0; }
-  .drill-wrap { padding: 14px 18px 18px; overflow-x: auto; }
-  .chevron { display: inline-block; transition: transform 0.15s; color: #9ca3af; }
-  .chevron.open { transform: rotate(90deg); }
   .num { font-variant-numeric: tabular-nums; text-align: right; }
   .btn-xs { padding: 4px 8px; font-size: 11px; margin-right: 4px; }
-  .report-cell { white-space: nowrap; overflow: visible; }
+  .action-cell { white-space: nowrap; overflow: visible; }
   .muted { color: var(--text-dim); font-size: 13px; }
   .filters .field.export-bar { flex-direction: row; gap: 8px; margin-left: auto; }
   .badge.gap { background: #fee2e2; color: #b91c1c; }
+
+  .pager-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 4px 4px; font-size: 13px; color: var(--text-dim, #6b7280);
+  }
+  .pager-controls { display: flex; align-items: center; gap: 8px; }
+
+  /* Recipient modal */
+  .recipient-modal .modal { max-width: 820px; }
+  .toggle-group { display: inline-flex; border: 1px solid var(--line-strong, #d1d5db); border-radius: 8px; overflow: hidden; }
+  .toggle-group button {
+    border: none; background: #fff; padding: 8px 14px; font-size: 13px; font-weight: 600;
+    cursor: pointer; color: var(--text-dim, #6b7280);
+  }
+  .toggle-group button.active { background: var(--rose, #D56269); color: #fff; }
+  .recipient-toolbar { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .recipient-toolbar .field { display: flex; flex-direction: column; gap: 6px; }
+  .recipient-toolbar select, .recipient-toolbar input {
+    padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line-strong, #d1d5db); font-size: 13px;
+  }
+  .recipient-summary { font-size: 13px; color: var(--text-dim, #6b7280); margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -60,10 +75,9 @@
 
   <div class="panel">
     <div class="callout" style="margin-bottom: 16px;">
-      A "button click" is logged every time your automation calls
-      <code>GET /api/campaign-details</code> for a button. For per-recipient
-      drop-off (below), that call also needs <code>&amp;mobile_number=...</code> --
-      without it, only the aggregate totals are accurate, not who specifically didn't click.
+      A "button click" is logged by <code>POST/GET /api/log-button-click</code>. Pass
+      <code>&amp;mobile_number=...</code> to unlock per-recipient drop-off below —
+      without it, only the aggregate totals are accurate.
     </div>
 
     <div class="filters">
@@ -93,19 +107,18 @@
       </div>
       <div class="field export-bar">
         <a class="btn btn-download" id="export-csv" href="#" title="Streams the full matching dataset, any size">Download CSV</a>
-        <a class="btn btn-download" id="export-xlsx" href="#" title="Capped at 50,000 rows">Download Excel</a>
+        <a class="btn btn-download" id="export-xlsx" href="#" title="Capped at 150,000 rows">Download Excel</a>
       </div>
     </div>
 
     <div id="summary-wrap" style="margin-top: 18px;">
       <table id="summary-table">
         <colgroup>
-          <col class="col-chevron"><col class="col-button"><col class="col-num"><col class="col-num">
-          <col class="col-num"><col class="col-num"><col class="col-gap"><col class="col-date"><col class="col-report">
+          <col class="col-button"><col class="col-num"><col class="col-num">
+          <col class="col-num"><col class="col-num"><col class="col-gap"><col class="col-date"><col class="col-action">
         </colgroup>
         <thead>
           <tr>
-            <th></th>
             <th>Campaign button</th>
             <th class="num">Button clicks</th>
             <th class="num">Unique clickers</th>
@@ -113,16 +126,75 @@
             <th class="num">Unique URL clickers</th>
             <th class="num">Button, not URL</th>
             <th>Last activity</th>
-            <th>Report</th>
+            <th>Recipients / Report</th>
           </tr>
         </thead>
         <tbody id="summary-body"></tbody>
       </table>
       <div class="empty-state" id="summary-empty" style="display:none;">No data matches these filters.</div>
       <div class="loading" id="summary-loading">Loading summary…</div>
+
+      <div class="pager-bar" id="summary-pager" style="display:none;">
+        <span id="summary-pager-info"></span>
+        <div class="pager-controls">
+          <button class="btn btn-neutral btn-sm" id="summary-prev">Prev</button>
+          <button class="btn btn-neutral btn-sm" id="summary-next">Next</button>
+        </div>
+      </div>
     </div>
   </div>
 
+</div>
+
+<!-- Recipient browser modal -->
+<div class="modal-overlay recipient-modal" id="recipient-modal">
+  <div class="modal">
+    <button class="btn-ghost modal-close" id="close-recipient-modal">Close ✕</button>
+    <h2 id="recipient-modal-title" style="margin-top:4px;">Recipients</h2>
+
+    <div class="recipient-toolbar">
+      <div class="field">
+        <label>View</label>
+        <div class="toggle-group">
+          <button type="button" id="toggle-not-clicked" class="active">Not clicked only</button>
+          <button type="button" id="toggle-all">All recipients</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="recipient-search">Search mobile</label>
+        <input type="text" id="recipient-search" placeholder="e.g. 98765...">
+      </div>
+      <div class="field">
+        <label for="recipient-sort">Sort</label>
+        <select id="recipient-sort">
+          <option value="recent">Most recent tap first</option>
+          <option value="not_clicked_first">Not clicked first</option>
+        </select>
+      </div>
+      <div class="field" style="margin-left: auto; flex-direction: row; gap: 8px; align-items: flex-end;">
+        <a class="btn btn-neutral btn-sm" id="recipient-export-csv" href="#">Export this view (CSV)</a>
+      </div>
+    </div>
+
+    <div class="recipient-summary" id="recipient-summary"></div>
+
+    <div id="recipient-table-wrap">
+      <table>
+        <thead><tr><th>Mobile</th><th>Button Click</th><th>URL Click</th></tr></thead>
+        <tbody id="recipient-body"></tbody>
+      </table>
+      <div class="empty-state" id="recipient-empty" style="display:none;">No recipients match this view.</div>
+      <div class="loading" id="recipient-loading">Loading…</div>
+    </div>
+
+    <div class="pager-bar" id="recipient-pager">
+      <span id="recipient-pager-info"></span>
+      <div class="pager-controls">
+        <button class="btn btn-neutral btn-sm" id="recipient-prev">Prev</button>
+        <button class="btn btn-neutral btn-sm" id="recipient-next">Next</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="/js/logout.js"></script>

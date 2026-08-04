@@ -29,7 +29,11 @@ function toRow(r) {
   };
 }
 
-async function* fetchAllRows(buttonName, hardCap, start, end) {
+// only_not_clicked/search_mobile default to "off" so the row-level Report
+// buttons (which don't pass them) export the COMPLETE dataset. The
+// recipient modal passes them explicitly for an "export what I'm looking
+// at" option.
+async function* fetchAllRows(buttonName, hardCap, start, end, onlyNotClicked, searchMobile, sort) {
   let page = 1;
   let fetched = 0;
   while (true) {
@@ -39,6 +43,9 @@ async function* fetchAllRows(buttonName, hardCap, start, end) {
       p_page_size: BATCH_SIZE,
       p_start_date: start,
       p_end_date: end,
+      p_only_not_clicked: onlyNotClicked,
+      p_search_mobile: searchMobile,
+      p_sort: sort,
     });
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) return;
@@ -59,6 +66,9 @@ export async function GET(request) {
   const format = (searchParams.get('format') || 'csv').toLowerCase();
   const buttonName = searchParams.get('button_name');
   const { start, end } = toDateRangeBounds(searchParams.get('start_date'), searchParams.get('end_date'));
+  const onlyNotClicked = searchParams.get('only_not_clicked') === 'true';
+  const searchMobile = searchParams.get('search_mobile') || null;
+  const sort = searchParams.get('sort') === 'not_clicked_first' ? 'not_clicked_first' : 'recent';
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 
   if (!buttonName) {
@@ -76,7 +86,7 @@ export async function GET(request) {
     let count = 0;
     let truncated = false;
     try {
-      for await (const row of fetchAllRows(buttonName, XLSX_CAP + 1, start, end)) {
+      for await (const row of fetchAllRows(buttonName, XLSX_CAP + 1, start, end, onlyNotClicked, searchMobile, sort)) {
         if (count >= XLSX_CAP) { truncated = true; break; }
         sheet.addRow(toRow(row));
         count++;
@@ -104,7 +114,7 @@ export async function GET(request) {
     async start(controller) {
       try {
         controller.enqueue(encoder.encode(COLUMNS.map((c) => c.header).join(',') + '\n'));
-        for await (const row of fetchAllRows(buttonName, null, start, end)) {
+        for await (const row of fetchAllRows(buttonName, null, start, end, onlyNotClicked, searchMobile, sort)) {
           const r = toRow(row);
           controller.enqueue(encoder.encode(COLUMNS.map((c) => csvEscape(r[c.key])).join(',') + '\n'));
         }

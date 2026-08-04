@@ -85,102 +85,12 @@ alter table campaigns enable row level security;
 -- p_start_date/p_end_date optionally scope which CLICKS count toward
 -- total_clicks/last_click (via the JOIN condition, not a WHERE clause) --
 -- total_links/unique_mobiles are unaffected by the date range.
-create or replace function get_click_summary(
-  p_mobile text default null,
-  p_campaign_button_name text default null,
-  p_start_date timestamptz default null,
-  p_end_date timestamptz default null
-)
-returns table (
-  campaign_button_name text,
-  total_links bigint,
-  total_clicks bigint,
-  unique_mobiles bigint,
-  last_click timestamptz
-)
-language sql
-stable
-as $$
-  select
-    coalesce(l.campaign_button_name, '(no campaign button)') as campaign_button_name,
-    count(distinct l.id)                                      as total_links,
-    count(c.id)                                                as total_clicks,
-    count(distinct l.mobile_number)                            as unique_mobiles,
-    max(c.clicked_at)                                          as last_click
-  from links l
-  left join clicks c
-    on c.link_id = l.id
-    and (p_start_date is null or c.clicked_at >= p_start_date)
-    and (p_end_date is null or c.clicked_at <= p_end_date)
-  where (p_mobile is null or l.mobile_number ilike '%' || p_mobile || '%')
-    and (p_campaign_button_name is null or l.campaign_button_name ilike '%' || p_campaign_button_name || '%')
-  group by coalesce(l.campaign_button_name, '(no campaign button)')
-  order by max(c.clicked_at) desc nulls last, count(c.id) desc;
-$$;
 
 -- Paginated link-level report (one row per short link / recipient), with
 -- click counts computed per-row via a LATERAL join — so Postgres only
 -- aggregates clicks for the rows actually being returned on this page,
 -- not the entire clicks table. p_start_date/p_end_date optionally scope
 -- the click stats the same way as get_click_summary above.
-create or replace function get_links_report(
-  p_mobile text default null,
-  p_campaign_button_name text default null,
-  p_exact boolean default false,
-  p_page int default 1,
-  p_page_size int default 25,
-  p_start_date timestamptz default null,
-  p_end_date timestamptz default null
-)
-returns table (
-  id uuid,
-  code text,
-  long_url text,
-  mobile_number text,
-  campaign_button_name text,
-  label text,
-  created_at timestamptz,
-  total_clicks bigint,
-  unique_clicks bigint,
-  last_clicked_at timestamptz,
-  total_count bigint
-)
-language sql
-stable
-as $$
-  with filtered as (
-    select l.*
-    from links l
-    where (p_mobile is null or l.mobile_number ilike '%' || p_mobile || '%')
-      and (
-        p_campaign_button_name is null
-        or (p_exact and l.campaign_button_name = p_campaign_button_name)
-        or (not p_exact and l.campaign_button_name ilike '%' || p_campaign_button_name || '%')
-      )
-  ),
-  counted as (
-    select count(*) as total_count from filtered
-  )
-  select
-    f.id, f.code, f.long_url, f.mobile_number, f.campaign_button_name, f.label, f.created_at,
-    coalesce(cs.total_clicks, 0) as total_clicks,
-    coalesce(cs.unique_clicks, 0) as unique_clicks,
-    cs.last_clicked_at,
-    (select total_count from counted) as total_count
-  from filtered f
-  left join lateral (
-    select
-      count(*)              as total_clicks,
-      count(distinct c.ip)  as unique_clicks,
-      max(c.clicked_at)     as last_clicked_at
-    from clicks c
-    where c.link_id = f.id
-      and (p_start_date is null or c.clicked_at >= p_start_date)
-      and (p_end_date is null or c.clicked_at <= p_end_date)
-  ) cs on true
-  order by f.created_at desc
-  limit p_page_size offset (p_page - 1) * p_page_size;
-$$;
 
 -- Paginated individual click log for ONE link (used by the "Show Clicks"
 -- detail modal) — never pulls more than one page of clicks at a time.
@@ -220,78 +130,6 @@ $$;
 -- campaign_button_name, with the link's own stats repeated on every row --
 -- used by the row-level "Download" button on the Clicker Data summary table.
 -- Links with zero clicks still appear once, with the click columns blank.
-create or replace function get_campaign_click_detail(
-  p_campaign_button_name text,
-  p_page int default 1,
-  p_page_size int default 1000,
-  p_start_date timestamptz default null,
-  p_end_date timestamptz default null
-)
-returns table (
-  mobile_number text,
-  code text,
-  long_url text,
-  total_clicks bigint,
-  unique_clicks bigint,
-  last_clicked_at timestamptz,
-  created_at timestamptz,
-  clicked_at timestamptz,
-  ip text,
-  city text,
-  country text,
-  user_agent text,
-  total_count bigint
-)
-language sql
-stable
-as $$
-  with target_links as (
-    select l.*
-    from links l
-    where l.campaign_button_name = p_campaign_button_name
-  ),
-  link_stats as (
-    select
-      tl.id,
-      count(c.id)             as total_clicks,
-      count(distinct c.ip)    as unique_clicks,
-      max(c.clicked_at)       as last_clicked_at
-    from target_links tl
-    left join clicks c
-      on c.link_id = tl.id
-      and (p_start_date is null or c.clicked_at >= p_start_date)
-      and (p_end_date is null or c.clicked_at <= p_end_date)
-    group by tl.id
-  ),
-  joined as (
-    select
-      tl.mobile_number,
-      tl.code,
-      tl.long_url,
-      ls.total_clicks,
-      ls.unique_clicks,
-      ls.last_clicked_at,
-      tl.created_at,
-      c.clicked_at,
-      c.ip,
-      c.city,
-      c.country,
-      c.user_agent
-    from target_links tl
-    join link_stats ls on ls.id = tl.id
-    left join clicks c
-      on c.link_id = tl.id
-      and (p_start_date is null or c.clicked_at >= p_start_date)
-      and (p_end_date is null or c.clicked_at <= p_end_date)
-  ),
-  counted as (
-    select count(*) as total_count from joined
-  )
-  select j.*, (select total_count from counted)
-  from joined j
-  order by j.created_at desc, j.clicked_at desc nulls last
-  limit p_page_size offset (p_page - 1) * p_page_size;
-$$;
 
 -- ---------------------------------------------------------------------------
 -- Login module
@@ -353,84 +191,6 @@ create index if not exists idx_button_clicks_clicked_at on button_clicks(clicked
 -- Without a mobile number, we can count total button taps but can't tell
 -- WHICH person didn't follow through, only the aggregate gap.
 -- ---------------------------------------------------------------------------
-create or replace function get_button_vs_url_summary(
-  p_button_name text default null,
-  p_start_date timestamptz default null,
-  p_end_date timestamptz default null,
-  p_mobile_number text default null
-)
-returns table (
-  button_name text,
-  total_button_clicks bigint,
-  unique_button_clickers bigint,
-  total_url_clicks bigint,
-  unique_url_clickers bigint,
-  clicked_button_not_url bigint,
-  last_button_click timestamptz,
-  last_url_click timestamptz
-)
-language sql
-stable
-as $$
-  with bc as (
-    select button_name, mobile_number, clicked_at
-    from button_clicks
-    where (p_button_name is null or button_name ilike '%' || p_button_name || '%')
-      and (p_start_date is null or clicked_at >= p_start_date)
-      and (p_end_date is null or clicked_at <= p_end_date)
-      and (p_mobile_number is null or mobile_number ilike '%' || p_mobile_number || '%')
-  ),
-  bc_agg as (
-    select
-      button_name,
-      count(*)                                                        as total_button_clicks,
-      count(distinct mobile_number) filter (where mobile_number is not null) as unique_button_clickers,
-      max(clicked_at)                                                 as last_button_click
-    from bc
-    group by button_name
-  ),
-  url as (
-    select l.campaign_button_name as button_name, l.mobile_number, c.clicked_at
-    from links l
-    join clicks c on c.link_id = l.id
-    where l.campaign_button_name is not null
-      and (p_button_name is null or l.campaign_button_name ilike '%' || p_button_name || '%')
-      and (p_start_date is null or c.clicked_at >= p_start_date)
-      and (p_end_date is null or c.clicked_at <= p_end_date)
-      and (p_mobile_number is null or l.mobile_number ilike '%' || p_mobile_number || '%')
-  ),
-  url_agg as (
-    select
-      button_name,
-      count(*)                        as total_url_clicks,
-      count(distinct mobile_number)   as unique_url_clickers,
-      max(clicked_at)                 as last_url_click
-    from url
-    group by button_name
-  ),
-  not_converted as (
-    select bc.button_name, count(distinct bc.mobile_number) as clicked_button_not_url
-    from bc
-    where bc.mobile_number is not null
-      and not exists (
-        select 1 from url u where u.button_name = bc.button_name and u.mobile_number = bc.mobile_number
-      )
-    group by bc.button_name
-  )
-  select
-    coalesce(bc_agg.button_name, url_agg.button_name)     as button_name,
-    coalesce(bc_agg.total_button_clicks, 0)                as total_button_clicks,
-    coalesce(bc_agg.unique_button_clickers, 0)             as unique_button_clickers,
-    coalesce(url_agg.total_url_clicks, 0)                  as total_url_clicks,
-    coalesce(url_agg.unique_url_clickers, 0)               as unique_url_clickers,
-    coalesce(nc.clicked_button_not_url, 0)                 as clicked_button_not_url,
-    bc_agg.last_button_click,
-    url_agg.last_url_click
-  from bc_agg
-  full outer join url_agg on url_agg.button_name = bc_agg.button_name
-  left join not_converted nc on nc.button_name = coalesce(bc_agg.button_name, url_agg.button_name)
-  order by greatest(coalesce(bc_agg.last_button_click, 'epoch'), coalesce(url_agg.last_url_click, 'epoch')) desc;
-$$;
 
 -- Drill-down: the actual mobile numbers who tapped the button but never
 -- clicked the URL, for one exact button_name. Only includes button-click
@@ -486,5 +246,355 @@ as $$
   select nc.*, (select total_count from counted)
   from not_converted nc
   order by nc.last_button_click desc
+  limit p_page_size offset (p_page - 1) * p_page_size;
+$$;
+
+-- Full per-recipient report (Mobile | Button Click | URL Click) for ALL
+-- recipients who tapped a button, not just the non-converted ones.
+-- url_click is null for anyone who tapped but never clicked the URL.
+
+-- ---------------------------------------------------------------------------
+-- Reporting functions -- paginated summaries + richer recipient drill-down
+-- (see MIGRATION_v8.sql for details on what changed and why)
+-- ---------------------------------------------------------------------------
+create or replace function get_click_summary(
+  p_mobile text default null,
+  p_campaign_button_name text default null,
+  p_start_date timestamptz default null,
+  p_end_date timestamptz default null,
+  p_page int default 1,
+  p_page_size int default 25
+)
+returns table (
+  campaign_button_name text,
+  total_links bigint,
+  total_clicks bigint,
+  unique_mobiles bigint,
+  last_click timestamptz,
+  total_count bigint
+)
+language sql
+stable
+as $$
+  with grouped as (
+    select
+      coalesce(l.campaign_button_name, '(no campaign button)') as campaign_button_name,
+      count(distinct l.id)                                      as total_links,
+      count(c.id)                                                as total_clicks,
+      count(distinct l.mobile_number)                            as unique_mobiles,
+      max(c.clicked_at)                                          as last_click
+    from links l
+    left join clicks c
+      on c.link_id = l.id
+      and (p_start_date is null or c.clicked_at >= p_start_date)
+      and (p_end_date is null or c.clicked_at <= p_end_date)
+    where (p_mobile is null or l.mobile_number ilike '%' || p_mobile || '%')
+      and (p_campaign_button_name is null or l.campaign_button_name ilike '%' || p_campaign_button_name || '%')
+    group by coalesce(l.campaign_button_name, '(no campaign button)')
+  ),
+  counted as (
+    select count(*) as total_count from grouped
+  )
+  select g.*, (select total_count from counted)
+  from grouped g
+  order by g.last_click desc nulls last, g.total_clicks desc
+  limit p_page_size offset (p_page - 1) * p_page_size;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 1b. get_button_vs_url_summary -- now paginated
+-- ---------------------------------------------------------------------------
+create or replace function get_button_vs_url_summary(
+  p_button_name text default null,
+  p_start_date timestamptz default null,
+  p_end_date timestamptz default null,
+  p_mobile_number text default null,
+  p_page int default 1,
+  p_page_size int default 25
+)
+returns table (
+  button_name text,
+  total_button_clicks bigint,
+  unique_button_clickers bigint,
+  total_url_clicks bigint,
+  unique_url_clickers bigint,
+  clicked_button_not_url bigint,
+  last_button_click timestamptz,
+  last_url_click timestamptz,
+  total_count bigint
+)
+language sql
+stable
+as $$
+  with bc as (
+    select button_name, mobile_number, clicked_at
+    from button_clicks
+    where (p_button_name is null or button_name ilike '%' || p_button_name || '%')
+      and (p_start_date is null or clicked_at >= p_start_date)
+      and (p_end_date is null or clicked_at <= p_end_date)
+      and (p_mobile_number is null or mobile_number ilike '%' || p_mobile_number || '%')
+  ),
+  bc_agg as (
+    select
+      button_name,
+      count(*)                                                        as total_button_clicks,
+      count(distinct mobile_number) filter (where mobile_number is not null) as unique_button_clickers,
+      max(clicked_at)                                                 as last_button_click
+    from bc
+    group by button_name
+  ),
+  url as (
+    select l.campaign_button_name as button_name, l.mobile_number, c.clicked_at
+    from links l
+    join clicks c on c.link_id = l.id
+    where l.campaign_button_name is not null
+      and (p_button_name is null or l.campaign_button_name ilike '%' || p_button_name || '%')
+      and (p_start_date is null or c.clicked_at >= p_start_date)
+      and (p_end_date is null or c.clicked_at <= p_end_date)
+      and (p_mobile_number is null or l.mobile_number ilike '%' || p_mobile_number || '%')
+  ),
+  url_agg as (
+    select
+      button_name,
+      count(*)                        as total_url_clicks,
+      count(distinct mobile_number)   as unique_url_clickers,
+      max(clicked_at)                 as last_url_click
+    from url
+    group by button_name
+  ),
+  not_converted as (
+    select bc.button_name, count(distinct bc.mobile_number) as clicked_button_not_url
+    from bc
+    where bc.mobile_number is not null
+      and not exists (
+        select 1 from url u where u.button_name = bc.button_name and u.mobile_number = bc.mobile_number
+      )
+    group by bc.button_name
+  ),
+  final as (
+    select
+      coalesce(bc_agg.button_name, url_agg.button_name)     as button_name,
+      coalesce(bc_agg.total_button_clicks, 0)                as total_button_clicks,
+      coalesce(bc_agg.unique_button_clickers, 0)             as unique_button_clickers,
+      coalesce(url_agg.total_url_clicks, 0)                  as total_url_clicks,
+      coalesce(url_agg.unique_url_clickers, 0)               as unique_url_clickers,
+      coalesce(nc.clicked_button_not_url, 0)                 as clicked_button_not_url,
+      bc_agg.last_button_click,
+      url_agg.last_url_click
+    from bc_agg
+    full outer join url_agg on url_agg.button_name = bc_agg.button_name
+    left join not_converted nc on nc.button_name = coalesce(bc_agg.button_name, url_agg.button_name)
+  ),
+  counted as (
+    select count(*) as total_count from final
+  )
+  select f.*, (select total_count from counted)
+  from final f
+  order by greatest(coalesce(f.last_button_click, 'epoch'), coalesce(f.last_url_click, 'epoch')) desc
+  limit p_page_size offset (p_page - 1) * p_page_size;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 2. get_button_recipient_detail -- adds not-clicked-only filter, in-modal
+--    mobile search, and sort mode. Default page size dropped to 25 (UI use);
+--    export passes its own larger page size explicitly, so exports are
+--    unaffected.
+-- ---------------------------------------------------------------------------
+create or replace function get_button_recipient_detail(
+  p_button_name text,
+  p_page int default 1,
+  p_page_size int default 25,
+  p_start_date timestamptz default null,
+  p_end_date timestamptz default null,
+  p_only_not_clicked boolean default false,
+  p_search_mobile text default null,
+  p_sort text default 'recent'
+)
+returns table (
+  mobile_number text,
+  button_click timestamptz,
+  url_click timestamptz,
+  total_count bigint
+)
+language sql
+stable
+as $$
+  with bc as (
+    select mobile_number, max(clicked_at) as button_click
+    from button_clicks
+    where button_name = p_button_name
+      and mobile_number is not null
+      and (p_start_date is null or clicked_at >= p_start_date)
+      and (p_end_date is null or clicked_at <= p_end_date)
+    group by mobile_number
+  ),
+  url as (
+    select l.mobile_number, max(c.clicked_at) as url_click
+    from links l
+    join clicks c on c.link_id = l.id
+    where l.campaign_button_name = p_button_name
+      and (p_start_date is null or c.clicked_at >= p_start_date)
+      and (p_end_date is null or c.clicked_at <= p_end_date)
+    group by l.mobile_number
+  ),
+  joined as (
+    select bc.mobile_number, bc.button_click, url.url_click
+    from bc
+    left join url on url.mobile_number = bc.mobile_number
+    where (not p_only_not_clicked or url.url_click is null)
+      and (p_search_mobile is null or bc.mobile_number ilike '%' || p_search_mobile || '%')
+  ),
+  counted as (
+    select count(*) as total_count from joined
+  )
+  select j.*, (select total_count from counted)
+  from joined j
+  order by
+    case when p_sort = 'not_clicked_first' then (j.url_click is null) end desc,
+    j.button_click desc
+  limit p_page_size offset (p_page - 1) * p_page_size;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 3. get_links_report -- adds a sort mode (default unchanged: most-recent-
+--    link-created-first; new option surfaces zero-click links first)
+-- ---------------------------------------------------------------------------
+create or replace function get_links_report(
+  p_mobile text default null,
+  p_campaign_button_name text default null,
+  p_exact boolean default false,
+  p_page int default 1,
+  p_page_size int default 25,
+  p_start_date timestamptz default null,
+  p_end_date timestamptz default null,
+  p_sort text default 'recent'
+)
+returns table (
+  id uuid,
+  code text,
+  long_url text,
+  mobile_number text,
+  campaign_button_name text,
+  label text,
+  created_at timestamptz,
+  total_clicks bigint,
+  unique_clicks bigint,
+  last_clicked_at timestamptz,
+  total_count bigint
+)
+language sql
+stable
+as $$
+  with filtered as (
+    select l.*
+    from links l
+    where (p_mobile is null or l.mobile_number ilike '%' || p_mobile || '%')
+      and (
+        p_campaign_button_name is null
+        or (p_exact and l.campaign_button_name = p_campaign_button_name)
+        or (not p_exact and l.campaign_button_name ilike '%' || p_campaign_button_name || '%')
+      )
+  ),
+  counted as (
+    select count(*) as total_count from filtered
+  ),
+  joined as (
+    select
+      f.id, f.code, f.long_url, f.mobile_number, f.campaign_button_name, f.label, f.created_at,
+      coalesce(cs.total_clicks, 0) as total_clicks,
+      coalesce(cs.unique_clicks, 0) as unique_clicks,
+      cs.last_clicked_at,
+      (select total_count from counted) as total_count
+    from filtered f
+    left join lateral (
+      select
+        count(*)              as total_clicks,
+        count(distinct c.ip)  as unique_clicks,
+        max(c.clicked_at)     as last_clicked_at
+      from clicks c
+      where c.link_id = f.id
+        and (p_start_date is null or c.clicked_at >= p_start_date)
+        and (p_end_date is null or c.clicked_at <= p_end_date)
+    ) cs on true
+  )
+  select *
+  from joined
+  order by
+    case when p_sort = 'no_clicks_first' then (total_clicks = 0) end desc,
+    created_at desc
+  limit p_page_size offset (p_page - 1) * p_page_size;
+$$;
+create or replace function get_campaign_click_detail(
+  p_campaign_button_name text,
+  p_page int default 1,
+  p_page_size int default 1000,
+  p_start_date timestamptz default null,
+  p_end_date timestamptz default null,
+  p_mobile text default null
+)
+returns table (
+  mobile_number text,
+  code text,
+  long_url text,
+  total_clicks bigint,
+  unique_clicks bigint,
+  last_clicked_at timestamptz,
+  created_at timestamptz,
+  clicked_at timestamptz,
+  ip text,
+  city text,
+  country text,
+  user_agent text,
+  total_count bigint
+)
+language sql
+stable
+as $$
+  with target_links as (
+    select l.*
+    from links l
+    where l.campaign_button_name = p_campaign_button_name
+      and (p_mobile is null or l.mobile_number ilike '%' || p_mobile || '%')
+  ),
+  link_stats as (
+    select
+      tl.id,
+      count(c.id)             as total_clicks,
+      count(distinct c.ip)    as unique_clicks,
+      max(c.clicked_at)       as last_clicked_at
+    from target_links tl
+    left join clicks c
+      on c.link_id = tl.id
+      and (p_start_date is null or c.clicked_at >= p_start_date)
+      and (p_end_date is null or c.clicked_at <= p_end_date)
+    group by tl.id
+  ),
+  joined as (
+    select
+      tl.mobile_number,
+      tl.code,
+      tl.long_url,
+      ls.total_clicks,
+      ls.unique_clicks,
+      ls.last_clicked_at,
+      tl.created_at,
+      c.clicked_at,
+      c.ip,
+      c.city,
+      c.country,
+      c.user_agent
+    from target_links tl
+    join link_stats ls on ls.id = tl.id
+    left join clicks c
+      on c.link_id = tl.id
+      and (p_start_date is null or c.clicked_at >= p_start_date)
+      and (p_end_date is null or c.clicked_at <= p_end_date)
+  ),
+  counted as (
+    select count(*) as total_count from joined
+  )
+  select j.*, (select total_count from counted)
+  from joined j
+  order by j.created_at desc, j.clicked_at desc nulls last
   limit p_page_size offset (p_page - 1) * p_page_size;
 $$;

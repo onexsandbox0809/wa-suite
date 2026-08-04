@@ -8,40 +8,38 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <style>
-  /* This page is data-dense, so it gets more width than the 900px form pages. */
   .main { max-width: 1520px; }
-
   table { table-layout: fixed; width: 100%; }
-  th, td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  th, td { padding: 10px 10px; }
+  th, td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 10px; }
 
-  /* Summary table column widths */
-  #summary-table col.col-chevron { width: 28px; }
   #summary-table col.col-button  { width: 30%; }
-  #summary-table col.col-num     { width: 9%; }
+  #summary-table col.col-num     { width: 11%; }
   #summary-table col.col-date    { width: 15%; }
-  #summary-table col.col-report  { width: 12%; }
+  #summary-table col.col-action  { width: 14%; }
 
-  .summary-row { cursor: pointer; }
   .summary-row:hover { background: #fafafa; }
-  .drill-row td { background: #fafafa; padding: 0; }
-  .drill-wrap { padding: 14px 18px 18px; overflow-x: auto; }
-  .chevron { display: inline-block; transition: transform 0.15s; color: #9ca3af; }
-  .chevron.open { transform: rotate(90deg); }
   .num { font-variant-numeric: tabular-nums; text-align: right; }
   .btn-xs { padding: 4px 8px; font-size: 11px; margin-right: 4px; }
-  .report-cell { white-space: nowrap; overflow: visible; }
-  .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 10px 4px 0; font-size: 13px; color: #6b7280; }
+  .action-cell { white-space: nowrap; overflow: visible; }
   .muted { color: var(--text-dim); font-size: 13px; }
   .filters .field.export-bar { flex-direction: row; gap: 8px; margin-left: auto; }
 
-  /* Drill-down (per-recipient) table column widths */
-  .drill-table col.c-mobile  { width: 13%; }
-  .drill-table col.c-short   { width: 13%; }
-  .drill-table col.c-dest    { width: 22%; }
-  .drill-table col.c-num     { width: 7%; }
-  .drill-table col.c-date    { width: 15%; }
-  .drill-table col.c-action  { width: 12%; }
+  .pager-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 4px 4px; font-size: 13px; color: var(--text-dim, #6b7280);
+  }
+  .pager-controls { display: flex; align-items: center; gap: 8px; }
+
+  .recipient-modal .modal { max-width: 900px; }
+  .recipient-toolbar { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .recipient-toolbar .field { display: flex; flex-direction: column; gap: 6px; }
+  .recipient-toolbar select, .recipient-toolbar input {
+    padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line-strong, #d1d5db); font-size: 13px;
+  }
+
+  /* Nested click-detail modal sits above the recipient modal */
+  #details-modal .modal { z-index: 60; }
+  #details-modal { z-index: 55; }
 </style>
 </head>
 <body>
@@ -93,37 +91,91 @@
         <button type="button" class="btn btn-neutral" id="clear-filters">Clear</button>
       </div>
       <div class="field export-bar">
-        <a class="btn btn-download" id="export-csv" href="#" title="Summary shown below, streamed as CSV, any size">Download CSV</a>
-        <a class="btn btn-download" id="export-xlsx" href="#" title="Summary shown below, capped at 50,000 rows">Download Excel</a>
+        <a class="btn btn-download" id="export-csv" href="#" title="Streams the full matching dataset, any size">Download CSV</a>
+        <a class="btn btn-download" id="export-xlsx" href="#" title="Capped at 150,000 rows">Download Excel</a>
       </div>
     </div>
 
     <div id="summary-wrap" style="margin-top: 18px;">
       <table id="summary-table">
         <colgroup>
-          <col class="col-chevron"><col class="col-button"><col class="col-num"><col class="col-num"><col class="col-num"><col class="col-date"><col class="col-report">
+          <col class="col-button"><col class="col-num"><col class="col-num"><col class="col-num"><col class="col-date"><col class="col-action">
         </colgroup>
         <thead>
           <tr>
-            <th></th>
             <th>Campaign button</th>
             <th class="num">Links sent</th>
             <th class="num">Total clicks</th>
             <th class="num">Unique recipients</th>
             <th>Last click</th>
-            <th>Report</th>
+            <th>Recipients / Report</th>
           </tr>
         </thead>
         <tbody id="summary-body"></tbody>
       </table>
       <div class="empty-state" id="summary-empty" style="display:none;">No click data matches these filters.</div>
       <div class="loading" id="summary-loading">Loading summary…</div>
+
+      <div class="pager-bar" id="summary-pager" style="display:none;">
+        <span id="summary-pager-info"></span>
+        <div class="pager-controls">
+          <button class="btn btn-neutral btn-sm" id="summary-prev">Prev</button>
+          <button class="btn btn-neutral btn-sm" id="summary-next">Next</button>
+        </div>
+      </div>
     </div>
   </div>
 
 </div>
 
-<!-- Individual click details modal -->
+<!-- Recipient browser modal -->
+<div class="modal-overlay recipient-modal" id="recipient-modal">
+  <div class="modal">
+    <button class="btn-ghost modal-close" id="close-recipient-modal">Close ✕</button>
+    <h2 id="recipient-modal-title" style="margin-top:4px;">Recipients</h2>
+
+    <div class="recipient-toolbar">
+      <div class="field grow">
+        <label for="recipient-search">Search mobile</label>
+        <input type="text" id="recipient-search" placeholder="e.g. 98765...">
+      </div>
+      <div class="field">
+        <label for="recipient-sort">Sort</label>
+        <select id="recipient-sort">
+          <option value="recent">Most recently created first</option>
+          <option value="no_clicks_first">No clicks first</option>
+        </select>
+      </div>
+      <div class="field" style="margin-left: auto;">
+        <a class="btn btn-neutral btn-sm" id="recipient-export-csv" href="#">Export this view (CSV)</a>
+      </div>
+    </div>
+
+    <div id="recipient-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Mobile</th><th>Short link</th><th>Destination</th>
+            <th class="num">Clicks</th><th class="num">Unique</th><th>Last click</th><th>Created</th><th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="recipient-body"></tbody>
+      </table>
+      <div class="empty-state" id="recipient-empty" style="display:none;">No recipients match this view.</div>
+      <div class="loading" id="recipient-loading">Loading…</div>
+    </div>
+
+    <div class="pager-bar" id="recipient-pager">
+      <span id="recipient-pager-info"></span>
+      <div class="pager-controls">
+        <button class="btn btn-neutral btn-sm" id="recipient-prev">Prev</button>
+        <button class="btn btn-neutral btn-sm" id="recipient-next">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Individual click details modal (nested above the recipient modal) -->
 <div class="modal-overlay" id="details-modal">
   <div class="modal">
     <button class="btn-ghost modal-close" id="close-modal">Close ✕</button>

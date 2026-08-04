@@ -46,7 +46,10 @@ function toRow(r, baseUrl) {
   };
 }
 
-async function* fetchAllRows(campaignButtonName, hardCap, start, end) {
+// mobile defaults to null so the row-level Report buttons (which don't pass
+// it) export the COMPLETE dataset. The recipient modal passes it explicitly
+// for an "export what I'm looking at" option.
+async function* fetchAllRows(campaignButtonName, hardCap, start, end, mobile) {
   let page = 1;
   let fetched = 0;
   while (true) {
@@ -56,6 +59,7 @@ async function* fetchAllRows(campaignButtonName, hardCap, start, end) {
       p_page_size: BATCH_SIZE,
       p_start_date: start,
       p_end_date: end,
+      p_mobile: mobile,
     });
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) return;
@@ -75,6 +79,7 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const format = (searchParams.get('format') || 'csv').toLowerCase();
   const campaignButtonName = searchParams.get('campaign_button_name');
+  const mobile = searchParams.get('mobile') || null;
   const { start, end } = toDateRangeBounds(searchParams.get('start_date'), searchParams.get('end_date'));
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 
@@ -94,7 +99,7 @@ export async function GET(request) {
     let count = 0;
     let truncated = false;
     try {
-      for await (const row of fetchAllRows(campaignButtonName, XLSX_CAP + 1, start, end)) {
+      for await (const row of fetchAllRows(campaignButtonName, XLSX_CAP + 1, start, end, mobile)) {
         if (count >= XLSX_CAP) { truncated = true; break; }
         sheet.addRow(toRow(row, baseUrl));
         count++;
@@ -122,7 +127,7 @@ export async function GET(request) {
     async start(controller) {
       try {
         controller.enqueue(encoder.encode(COLUMNS.map((c) => c.header).join(',') + '\n'));
-        for await (const row of fetchAllRows(campaignButtonName, null, start, end)) {
+        for await (const row of fetchAllRows(campaignButtonName, null, start, end, mobile)) {
           const r = toRow(row, baseUrl);
           const line = COLUMNS.map((c) => csvEscape(r[c.key])).join(',') + '\n';
           controller.enqueue(encoder.encode(line));
