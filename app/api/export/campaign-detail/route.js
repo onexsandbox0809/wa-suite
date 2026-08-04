@@ -9,6 +9,7 @@ const BATCH_SIZE = 5000; // fewer round trips for very large exports
 const XLSX_CAP = 150000; // comfortably covers 100k+ rows
 
 const COLUMNS = [
+  { key: 'campaign_button_name', header: 'Campaign Button' },
   { key: 'mobile_number', header: 'Mobile' },
   { key: 'short_link', header: 'Short Link' },
   { key: 'long_url', header: 'Destination' },
@@ -30,8 +31,9 @@ function csvEscape(v) {
 }
 function formatDate(iso) { return iso ? new Date(iso).toISOString() : ''; }
 
-function toRow(r, baseUrl) {
+function toRow(r, baseUrl, campaignButtonName) {
   return {
+    campaign_button_name: campaignButtonName,
     mobile_number: r.mobile_number,
     short_link: `${baseUrl}/${r.code}`,
     long_url: r.long_url,
@@ -101,7 +103,7 @@ export async function GET(request) {
     try {
       for await (const row of fetchAllRows(campaignButtonName, XLSX_CAP + 1, start, end, mobile)) {
         if (count >= XLSX_CAP) { truncated = true; break; }
-        sheet.addRow(toRow(row, baseUrl));
+        sheet.addRow(toRow(row, baseUrl, campaignButtonName));
         count++;
       }
     } catch (err) {
@@ -128,7 +130,7 @@ export async function GET(request) {
       try {
         controller.enqueue(encoder.encode(COLUMNS.map((c) => c.header).join(',') + '\n'));
         for await (const row of fetchAllRows(campaignButtonName, null, start, end, mobile)) {
-          const r = toRow(row, baseUrl);
+          const r = toRow(row, baseUrl, campaignButtonName);
           const line = COLUMNS.map((c) => csvEscape(r[c.key])).join(',') + '\n';
           controller.enqueue(encoder.encode(line));
         }
